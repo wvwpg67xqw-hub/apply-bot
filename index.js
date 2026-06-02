@@ -13,6 +13,30 @@ const questions = require("./questions.json");
 
 const GUILDS_PATH = "./data/guilds.json";
 
+// ─── Server → HR role name map ────────────────────────────────────────────────
+// Keys are case-insensitive substrings matched against the guild name.
+// Values are the exact role names to ping in that server.
+const SERVER_ROLE_MAP = [
+  { match: "plain promotions",    role: "Plain Promotions Apps"    },
+  { match: "advertising legends", role: "Advertising Legends Apps" },
+  { match: "devil advertising",   role: "Devil Advertising Apps"   },
+  { match: "prime promotions",    role: "Prime Promotions Apps"    },
+  { match: "shadow advertising",  role: "Shadow Advertising Apps"  },
+];
+
+// Returns the Discord Role object for the HR role in a guild, or null.
+// Priority: auto-map by server name → manually saved hrRole → null.
+function resolveHRRole(guild, savedHrRoleId) {
+  const guildNameLower = guild.name.toLowerCase();
+  const entry = SERVER_ROLE_MAP.find((e) => guildNameLower.includes(e.match));
+  if (entry) {
+    const role = guild.roles.cache.find((r) => r.name === entry.role);
+    if (role) return role;
+  }
+  if (savedHrRoleId) return guild.roles.cache.get(savedHrRoleId) || null;
+  return null;
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -260,8 +284,9 @@ client.on("messageCreate", async (message) => {
       return dmChannel.send("❌ Could not create a private thread. Make sure the bot has the correct permissions.");
     }
 
-    // Ping HR role (if configured) + send embed + buttons
-    const hrPing = guildConfig.hrRole ? `<@&${guildConfig.hrRole}>` : "";
+    // Ping HR role — auto-detected by server name, falls back to saved role
+    const hrRole = resolveHRRole(message.guild, guildConfig?.hrRole);
+    const hrPing = hrRole ? `<@&${hrRole.id}>` : "";
     const pingLine = hrPing ? `${hrPing} — new application to review.\n` : "";
 
     await thread.send({
@@ -301,8 +326,8 @@ client.on("interactionCreate", async (interaction) => {
   // Only HR or admins can press the buttons
   const guildConfig = getGuild(interaction.guild.id);
   const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
-  const isHR =
-    guildConfig?.hrRole && interaction.member.roles.cache.has(guildConfig.hrRole);
+  const hrRole = resolveHRRole(interaction.guild, guildConfig?.hrRole);
+  const isHR = hrRole && interaction.member.roles.cache.has(hrRole.id);
 
   if (!isAdmin && !isHR) {
     return interaction.reply({ content: "❌ You don't have permission to manage applications.", ephemeral: true });
