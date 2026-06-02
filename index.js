@@ -38,8 +38,8 @@ function resolveHRRole(guild, savedHrRoleId) {
 
 // ─── DB helpers ───────────────────────────────────────────────────────────────
 
-function getGuilds()              { return read(GUILDS_PATH); }
-function getGuild(id)             { return getGuilds().find((g) => g.id === id) || null; }
+function getGuilds()  { return read(GUILDS_PATH); }
+function getGuild(id) { return getGuilds().find((g) => g.id === id) || null; }
 
 function setGuildConfig(guildId, config) {
   const guilds = getGuilds();
@@ -50,8 +50,7 @@ function setGuildConfig(guildId, config) {
 }
 
 function isBlacklisted(guildId, userId) {
-  const g = getGuild(guildId);
-  return g?.blacklist?.includes(userId) ?? false;
+  return getGuild(guildId)?.blacklist?.includes(userId) ?? false;
 }
 
 function addToBlacklist(guildId, userId) {
@@ -70,12 +69,22 @@ function removeFromBlacklist(guildId, userId) {
   const before = guilds[idx].blacklist?.length || 0;
   guilds[idx].blacklist = (guilds[idx].blacklist || []).filter((id) => id !== userId);
   write(GUILDS_PATH, guilds);
-  return (guilds[idx].blacklist.length < before);
+  return guilds[idx].blacklist.length < before;
 }
 
 // ─── Slash command definitions ────────────────────────────────────────────────
 
 const commands = [
+  new SlashCommandBuilder()
+    .setName("panel")
+    .setDescription("(Admin) Post the application panel with an Apply button in a channel.")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    .addChannelOption((o) =>
+      o.setName("channel")
+        .setDescription("Channel to send the panel to (defaults to current channel).")
+        .setRequired(false)
+    ),
+
   new SlashCommandBuilder()
     .setName("apply")
     .setDescription("Submit a staff application — questions will be sent to your DMs."),
@@ -124,9 +133,9 @@ const commands = [
     .setDescription("Show all available commands."),
 ].map((c) => c.toJSON());
 
-// ─── Button row ───────────────────────────────────────────────────────────────
+// ─── Button rows ──────────────────────────────────────────────────────────────
 
-function buildActionRow(disabled = false) {
+function buildReviewRow(disabled = false) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("app_accept")
@@ -149,6 +158,102 @@ function buildActionRow(disabled = false) {
   );
 }
 
+function buildPanelRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("panel_apply")
+      .setLabel("Apply Now")
+      .setStyle(ButtonStyle.Primary)
+      .setEmoji("📋")
+  );
+}
+
+// ─── Shared application flow ──────────────────────────────────────────────────
+// Runs the full DM Q&A and posts the result to a private thread.
+// Returns true on success, false on failure.
+
+async function runApplication(user, guild) {
+  const guildConfig = getGuild(guild.id);
+  if (!guildConfig?.applicationChannel) return { ok: false, reason: "no_setup" };
+  if (isBlacklisted(guild.id, user.id))  return { ok: false, reason: "blacklisted" };
+
+  let dmChannel;
+  try {
+    dmChannel = await user.createDM();
+    await dmChannel.send(
+      `📋 **Welcome to the ${guild.name} staff application!**\n` +
+      `Answer each question below. You have **2 minutes** per question.\n` +
+      `Type your answer and press Enter to move on.`
+    );
+  } catch {
+    return { ok: false, reason: "no_dm" };
+  }
+
+  const answers = [];
+  for (let i = 0; i < questions.length; i++) {
+    await dmChannel.send(`**Question ${i + 1} of ${questions.length}**\n${questions[i]}`);
+    try {
+      const collected = await dmChannel.awaitMessages({
+        filter: (m) => m.author.id === user.id,
+        max: 1,
+        time: 120_000,
+        errors: ["time"],
+      });
+      answers.push(collected.first().content);
+    } catch {
+      await dmChannel.send("⏰ You took too long to answer. Application cancelled.");
+      return { ok: false, reason: "timeout" };
+    }
+  }
+
+  await dmChannel.send("✅ **Your application has been submitted!** You'll be notified once a decision is made.");
+
+  const appChannel = guild.channels.cache.get(guildConfig.applicationChannel);
+  if (!appChannel) {
+    await dmChannel.send("❌ Could not find the applications channel. Please contact an admin.");
+    return { ok: false, reason: "no_channel" };
+  }
+
+  // Build result embed
+  const embed = new EmbedBuilder()
+    .setTitle("📄 New Staff Application")
+    .setColor(0x5865f2)
+    .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL() })
+    .setTimestamp()
+    .setFooter({ text: `User ID: ${user.id}` });
+
+  questions.forEach((q, i) => {
+    embed.addFields({ name: q, value: answers[i] || "*No answer*", inline: false });
+  });
+
+  // Create private thread
+  let thread;
+  try {
+    thread = await appChannel.threads.create({
+      name: `app · ${user.username}`,
+      type: ChannelType.PrivateThread,
+      invitable: false,
+      reason: `Application from ${user.tag}`,
+    });
+  } catch (err) {
+    console.error("Failed to create private thread:", err);
+    await dmChannel.send("❌ Could not create a private thread. Please contact an admin.");
+    return { ok: false, reason: "no_thread" };
+  }
+
+  const hrRole   = resolveHRRole(guild, guildConfig?.hrRole);
+  const pingLine = hrRole ? `<@&${hrRole.id}> — new application to review.\n` : "";
+
+  await thread.send({
+    content: `${pingLine}**Applicant:** <@${user.id}>`,
+    embeds: [embed],
+    components: [buildReviewRow()],
+  });
+
+  console.log(`📄 Application thread created for ${user.tag} (${user.id}) → ${thread.id}`);
+  return { ok: true };
+}
+
 // ─── Client ───────────────────────────────────────────────────────────────────
 
 const client = new Client({
@@ -162,7 +267,6 @@ const client = new Client({
 
 client.once("ready", async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-
   const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
   try {
     console.log("🔄 Registering global slash commands...");
@@ -173,13 +277,13 @@ client.once("ready", async () => {
   }
 });
 
-// ─── Slash command handler ────────────────────────────────────────────────────
+// ─── Interaction handler ──────────────────────────────────────────────────────
 
 client.on("interactionCreate", async (interaction) => {
 
   // ── Slash commands ──────────────────────────────────────────────────────────
   if (interaction.isChatInputCommand()) {
-    const { commandName, guild, member, user } = interaction;
+    const { commandName, guild, user } = interaction;
 
     // /help
     if (commandName === "help") {
@@ -187,11 +291,12 @@ client.on("interactionCreate", async (interaction) => {
         .setTitle("📋 Apply Bot — Commands")
         .setColor(0x5865f2)
         .addFields(
-          { name: "`/apply`",            value: "Start a staff application via DM.",                                      inline: false },
-          { name: "`/setup`",            value: "*(Admin)* Set the applications channel and optional HR role.",           inline: false },
-          { name: "`/setrole`",          value: "*(Admin)* Set or update the HR role to ping.",                           inline: false },
-          { name: "`/blacklist`",        value: "*(Mod)* Prevent a user from applying.",                                  inline: false },
-          { name: "`/unblacklist`",      value: "*(Admin)* Remove a user from the blacklist.",                            inline: false },
+          { name: "`/panel`",       value: "*(Admin)* Post the application panel in a channel.",              inline: false },
+          { name: "`/apply`",       value: "Start a staff application via DM.",                               inline: false },
+          { name: "`/setup`",       value: "*(Admin)* Set the applications channel and optional HR role.",    inline: false },
+          { name: "`/setrole`",     value: "*(Admin)* Set or update the HR role to ping.",                    inline: false },
+          { name: "`/blacklist`",   value: "*(Mod)* Prevent a user from applying.",                           inline: false },
+          { name: "`/unblacklist`", value: "*(Admin)* Remove a user from the blacklist.",                     inline: false },
         )
         .setTimestamp();
       return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -234,22 +339,45 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
+    // /panel
+    if (commandName === "panel") {
+      const target = interaction.options.getChannel("channel") ?? interaction.channel;
+
+      const panelEmbed = new EmbedBuilder()
+        .setTitle("📋 Staff Applications")
+        .setDescription(
+          `Want to join the team at **${guild.name}**?\n\n` +
+          `Click the button below to start your application.\n` +
+          `The questions will be sent to your **DMs** — make sure they are open!\n\n` +
+          `> ⏱️ You have **2 minutes** to answer each question.\n` +
+          `> 📬 You'll be notified once a decision has been made.`
+        )
+        .setColor(0x5865f2)
+        .setTimestamp()
+        .setFooter({ text: guild.name });
+
+      await target.send({ embeds: [panelEmbed], components: [buildPanelRow()] });
+      return interaction.reply({ content: `✅ Panel sent to ${target}.`, ephemeral: true });
+    }
+
     // /apply
     if (commandName === "apply") {
       const guildConfig = getGuild(guild.id);
       if (!guildConfig?.applicationChannel) {
         return interaction.reply({ content: "❌ Applications are not set up yet. Ask an admin to run `/setup`.", ephemeral: true });
       }
-
       if (isBlacklisted(guild.id, user.id)) {
         return interaction.reply({ content: "🚫 You are blacklisted from submitting applications.", ephemeral: true });
       }
 
-      // Try to open DM before acknowledging
+      // Test DM access before replying
       let dmChannel;
       try {
         dmChannel = await user.createDM();
-        await dmChannel.send("📋 Starting your application! Answer each question. You have **2 minutes** per question.");
+        await dmChannel.send(
+          `📋 **Welcome to the ${guild.name} staff application!**\n` +
+          `Answer each question below. You have **2 minutes** per question.`
+        );
       } catch {
         return interaction.reply({ content: "❌ I couldn't DM you. Please enable DMs from server members and try again.", ephemeral: true });
       }
@@ -258,7 +386,7 @@ client.on("interactionCreate", async (interaction) => {
 
       const answers = [];
       for (let i = 0; i < questions.length; i++) {
-        await dmChannel.send(`**Question ${i + 1}/${questions.length}:**\n${questions[i]}`);
+        await dmChannel.send(`**Question ${i + 1} of ${questions.length}**\n${questions[i]}`);
         try {
           const collected = await dmChannel.awaitMessages({
             filter: (m) => m.author.id === user.id,
@@ -273,12 +401,10 @@ client.on("interactionCreate", async (interaction) => {
         }
       }
 
-      await dmChannel.send("✅ Your application has been submitted! You will be notified of the decision.");
+      await dmChannel.send("✅ **Your application has been submitted!** You'll be notified once a decision is made.");
 
-      const appChannel = guild.channels.cache.get(guildConfig.applicationChannel);
-      if (!appChannel) {
-        return dmChannel.send("❌ Could not find the applications channel. Please contact an admin.");
-      }
+      const appChannel = guild.channels.cache.get(getGuild(guild.id).applicationChannel);
+      if (!appChannel) return dmChannel.send("❌ Could not find the applications channel. Please contact an admin.");
 
       const embed = new EmbedBuilder()
         .setTitle("📄 New Staff Application")
@@ -286,34 +412,25 @@ client.on("interactionCreate", async (interaction) => {
         .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL() })
         .setTimestamp()
         .setFooter({ text: `User ID: ${user.id}` });
-
-      questions.forEach((q, i) => {
-        embed.addFields({ name: q, value: answers[i] || "*No answer*", inline: false });
-      });
+      questions.forEach((q, i) => embed.addFields({ name: q, value: answers[i] || "*No answer*", inline: false }));
 
       let thread;
       try {
         thread = await appChannel.threads.create({
-          name: `app-${user.username}`,
+          name: `app · ${user.username}`,
           type: ChannelType.PrivateThread,
           invitable: false,
           reason: `Application from ${user.tag}`,
         });
       } catch (err) {
-        console.error("Failed to create private thread:", err);
-        return dmChannel.send("❌ Could not create a private thread. Make sure the bot has the correct permissions.");
+        console.error("Failed to create thread:", err);
+        return dmChannel.send("❌ Could not create a private thread. Please contact an admin.");
       }
 
-      const hrRole    = resolveHRRole(guild, guildConfig?.hrRole);
-      const pingLine  = hrRole ? `<@&${hrRole.id}> — new application to review.\n` : "";
-
-      await thread.send({
-        content: `${pingLine}**Applicant:** <@${user.id}>`,
-        embeds: [embed],
-        components: [buildActionRow()],
-      });
-
-      console.log(`📄 Application thread created for ${user.tag}: ${thread.id}`);
+      const hrRole   = resolveHRRole(guild, getGuild(guild.id)?.hrRole);
+      const pingLine = hrRole ? `<@&${hrRole.id}> — new application to review.\n` : "";
+      await thread.send({ content: `${pingLine}**Applicant:** <@${user.id}>`, embeds: [embed], components: [buildReviewRow()] });
+      console.log(`📄 Thread for ${user.tag} → ${thread.id}`);
     }
 
     return;
@@ -321,48 +438,74 @@ client.on("interactionCreate", async (interaction) => {
 
   // ── Button interactions ─────────────────────────────────────────────────────
   if (interaction.isButton()) {
-    if (!["app_accept", "app_deny", "app_blacklist"].includes(interaction.customId)) return;
 
-    const guildConfig = getGuild(interaction.guild.id);
-    const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
-    const hrRole  = resolveHRRole(interaction.guild, guildConfig?.hrRole);
-    const isHR    = hrRole && interaction.member.roles.cache.has(hrRole.id);
+    // ── Apply panel button ──
+    if (interaction.customId === "panel_apply") {
+      const guild       = interaction.guild;
+      const user        = interaction.user;
+      const guildConfig = getGuild(guild.id);
 
-    if (!isAdmin && !isHR) {
-      return interaction.reply({ content: "❌ You don't have permission to manage applications.", ephemeral: true });
+      if (!guildConfig?.applicationChannel) {
+        return interaction.reply({ content: "❌ Applications are not set up yet. Ask an admin to run `/setup`.", ephemeral: true });
+      }
+      if (isBlacklisted(guild.id, user.id)) {
+        return interaction.reply({ content: "🚫 You are blacklisted from submitting applications.", ephemeral: true });
+      }
+
+      // Acknowledge immediately so the button doesn't time out
+      await interaction.reply({ content: "📬 Check your DMs — your application has started!", ephemeral: true });
+
+      const result = await runApplication(user, guild);
+      if (!result.ok && result.reason === "no_dm") {
+        // Edit the ephemeral reply to inform them
+        await interaction.editReply({ content: "❌ I couldn't DM you. Please enable DMs from server members and try again." });
+      }
+      return;
     }
 
-    const msg            = interaction.message;
-    const applicantMatch = msg.content.match(/\*\*Applicant:\*\* <@(\d+)>/);
-    if (!applicantMatch) {
-      return interaction.reply({ content: "❌ Could not determine the applicant from this message.", ephemeral: true });
-    }
+    // ── Review buttons (accept / deny / blacklist) ──
+    if (["app_accept", "app_deny", "app_blacklist"].includes(interaction.customId)) {
+      const guildConfig = getGuild(interaction.guild.id);
+      const isAdmin     = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+      const hrRole      = resolveHRRole(interaction.guild, guildConfig?.hrRole);
+      const isHR        = hrRole && interaction.member.roles.cache.has(hrRole.id);
 
-    const applicantId = applicantMatch[1];
-    const reviewer    = interaction.user.tag;
-    let applicantUser = null;
-    try { applicantUser = await client.users.fetch(applicantId); } catch {}
+      if (!isAdmin && !isHR) {
+        return interaction.reply({ content: "❌ You don't have permission to manage applications.", ephemeral: true });
+      }
 
-    if (interaction.customId === "app_accept") {
-      const updated = EmbedBuilder.from(msg.embeds[0]).setColor(0x57f287).setTitle("✅ Application Accepted");
-      await msg.edit({ embeds: [updated], components: [buildActionRow(true)] });
-      await interaction.reply({ content: `✅ Application **accepted** by ${reviewer}.` });
-      try { await applicantUser?.send(`✅ **Your application has been accepted!** Congratulations! A staff member from **${interaction.guild.name}** will reach out to you soon.`); } catch {}
-    }
+      const msg            = interaction.message;
+      const applicantMatch = msg.content.match(/\*\*Applicant:\*\* <@(\d+)>/);
+      if (!applicantMatch) {
+        return interaction.reply({ content: "❌ Could not determine the applicant from this message.", ephemeral: true });
+      }
 
-    else if (interaction.customId === "app_deny") {
-      const updated = EmbedBuilder.from(msg.embeds[0]).setColor(0xed4245).setTitle("❌ Application Denied");
-      await msg.edit({ embeds: [updated], components: [buildActionRow(true)] });
-      await interaction.reply({ content: `❌ Application **denied** by ${reviewer}.` });
-      try { await applicantUser?.send(`❌ **Your application has been denied.** Unfortunately your application to **${interaction.guild.name}** was not accepted at this time. You're welcome to apply again in the future.`); } catch {}
-    }
+      const applicantId = applicantMatch[1];
+      const reviewer    = interaction.user.tag;
+      let applicantUser = null;
+      try { applicantUser = await client.users.fetch(applicantId); } catch {}
 
-    else if (interaction.customId === "app_blacklist") {
-      addToBlacklist(interaction.guild.id, applicantId);
-      const updated = EmbedBuilder.from(msg.embeds[0]).setColor(0x000000).setTitle("🚫 Application Denied — Blacklisted");
-      await msg.edit({ embeds: [updated], components: [buildActionRow(true)] });
-      await interaction.reply({ content: `🚫 Application **denied & user blacklisted** by ${reviewer}.` });
-      try { await applicantUser?.send(`🚫 **Your application has been denied** and you have been blacklisted from applying to **${interaction.guild.name}** in the future.`); } catch {}
+      if (interaction.customId === "app_accept") {
+        const updated = EmbedBuilder.from(msg.embeds[0]).setColor(0x57f287).setTitle("✅ Application Accepted");
+        await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
+        await interaction.reply({ content: `✅ Application **accepted** by ${reviewer}.` });
+        try { await applicantUser?.send(`✅ **Your application has been accepted!** Congratulations! A staff member from **${interaction.guild.name}** will reach out to you soon.`); } catch {}
+      }
+
+      else if (interaction.customId === "app_deny") {
+        const updated = EmbedBuilder.from(msg.embeds[0]).setColor(0xed4245).setTitle("❌ Application Denied");
+        await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
+        await interaction.reply({ content: `❌ Application **denied** by ${reviewer}.` });
+        try { await applicantUser?.send(`❌ **Your application has been denied.** Unfortunately your application to **${interaction.guild.name}** was not accepted at this time. You're welcome to apply again in the future.`); } catch {}
+      }
+
+      else if (interaction.customId === "app_blacklist") {
+        addToBlacklist(interaction.guild.id, applicantId);
+        const updated = EmbedBuilder.from(msg.embeds[0]).setColor(0x000000).setTitle("🚫 Application Denied — Blacklisted");
+        await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
+        await interaction.reply({ content: `🚫 Application **denied & user blacklisted** by ${reviewer}.` });
+        try { await applicantUser?.send(`🚫 **Your application has been denied** and you have been blacklisted from applying to **${interaction.guild.name}** in the future.`); } catch {}
+      }
     }
   }
 });
