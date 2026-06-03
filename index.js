@@ -276,13 +276,25 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("setacceptroles")
-    .setDescription("(Admin) Set the roles given to a user when their application is accepted.")
+    .setDescription("(Admin) Set the roles granted per application type when accepted. Run in each source server.")
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
     .addRoleOption((o) =>
-      o.setName("team").setDescription("The staff team role to grant on accept.").setRequired(true)
+      o.setName("hr-role").setDescription("Role given to accepted HR applicants (e.g. @HR).").setRequired(true)
     )
     .addRoleOption((o) =>
-      o.setName("normal").setDescription("The normal/member role to grant on accept.").setRequired(true)
+      o.setName("hr-team").setDescription("Team role also given to accepted HR applicants (e.g. @Staff Team).").setRequired(true)
+    )
+    .addRoleOption((o) =>
+      o.setName("mod-role").setDescription("Role given to accepted Mod applicants (e.g. @Moderator).").setRequired(true)
+    )
+    .addRoleOption((o) =>
+      o.setName("mod-team").setDescription("Team role also given to accepted Mod applicants (e.g. @Staff Team).").setRequired(true)
+    )
+    .addRoleOption((o) =>
+      o.setName("partnership-role").setDescription("Role given to accepted Partnership applicants (e.g. @Partnership Manager).").setRequired(true)
+    )
+    .addRoleOption((o) =>
+      o.setName("partnership-team").setDescription("Team role also given to accepted Partnership applicants (e.g. @Staff Team).").setRequired(true)
     ),
 
   new SlashCommandBuilder()
@@ -600,15 +612,40 @@ client.on("interactionCreate", async (interaction) => {
 
     // /setacceptroles
     if (commandName === "setacceptroles") {
-      const teamRole   = interaction.options.getRole("team");
-      const normalRole = interaction.options.getRole("normal");
-      setGuildConfig(guild.id, { teamRoleId: teamRole.id, normalRoleId: normalRole.id });
+      const hrRole          = interaction.options.getRole("hr-role");
+      const hrTeam          = interaction.options.getRole("hr-team");
+      const modRole         = interaction.options.getRole("mod-role");
+      const modTeam         = interaction.options.getRole("mod-team");
+      const partnerRole     = interaction.options.getRole("partnership-role");
+      const partnerTeam     = interaction.options.getRole("partnership-team");
+
+      setGuildConfig(guild.id, {
+        hrRoleId:           hrRole.id,
+        hrTeamRoleId:       hrTeam.id,
+        modRoleId:          modRole.id,
+        modTeamRoleId:      modTeam.id,
+        partnershipRoleId:  partnerRole.id,
+        partnershipTeamRoleId: partnerTeam.id,
+      });
+
       return interaction.reply({
-        content:
-          `✅ Accept roles set for **${guild.name}**.\n` +
-          `**Team role:** ${teamRole}\n` +
-          `**Normal role:** ${normalRole}\n\n` +
-          `These will be granted to applicants when their application is accepted.`,
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(`✅ Accept roles configured for ${guild.name}`)
+            .setColor(0x57f287)
+            .addFields(
+              { name: "👥 HR Role",                   value: `${hrRole}`,      inline: true },
+              { name: "👥 HR Team Role",               value: `${hrTeam}`,      inline: true },
+              { name: "\u200b",                        value: "\u200b",          inline: true },
+              { name: "🔨 Mod Role",                   value: `${modRole}`,     inline: true },
+              { name: "🔨 Mod Team Role",               value: `${modTeam}`,     inline: true },
+              { name: "\u200b",                        value: "\u200b",          inline: true },
+              { name: "🤝 Partnership Manager Role",   value: `${partnerRole}`, inline: true },
+              { name: "🤝 Partnership Team Role",      value: `${partnerTeam}`, inline: true },
+              { name: "\u200b",                        value: "\u200b",          inline: true },
+            )
+            .setFooter({ text: "These roles will be granted when an application is accepted." }),
+        ],
         ephemeral: true,
       });
     }
@@ -789,7 +826,15 @@ client.on("interactionCreate", async (interaction) => {
           try { member = await sourceGuild.members.fetch(applicantId); } catch {}
 
           if (member) {
-            for (const [key, label] of [["teamRoleId", "team"], ["normalRoleId", "normal"]]) {
+            // Pick the two role IDs for this application type
+            const typeRoleKeys = {
+              hr:          ["hrRoleId",          "hrTeamRoleId"],
+              mod:         ["modRoleId",          "modTeamRoleId"],
+              partnership: ["partnershipRoleId",  "partnershipTeamRoleId"],
+            };
+            const [specificKey, teamKey] = typeRoleKeys[roleType] ?? [];
+            for (const [key, label] of [[specificKey, "role"], [teamKey, "team role"]]) {
+              if (!key) continue;
               const roleId = sourceGuildCfg[key];
               if (!roleId) continue;
               try {
