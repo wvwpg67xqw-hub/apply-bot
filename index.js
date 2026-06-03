@@ -18,6 +18,19 @@ const GUILDS_PATH  = "./data/guilds.json";
 const CONFIG_PATH  = "./data/config.json";
 const STAFF_INVITE = "https://discord.gg/qcXfZqQVC4";
 
+const HIRE_CHANNEL_ID = "1492449923327856731";
+
+const ROLE_GUIDES = {
+  mod: {
+    guide: "https://discord.com/channels/1487744336908124190/1492459191091335169",
+    tasks: "https://discord.com/channels/1487744336908124190/1492460725161955388",
+  },
+  hr: {
+    guide: "https://discord.com/channels/1487744336908124190/1492455172356702348",
+    tasks: "https://discord.com/channels/1487744336908124190/1492458589959487541",
+  },
+};
+
 // ─── Role type metadata ───────────────────────────────────────────────────────
 
 const ROLE_TYPES = {
@@ -904,6 +917,37 @@ client.on("interactionCreate", async (interaction) => {
           )
           .setTimestamp();
         await postResult(resultEmbed);
+
+        // Post hire announcement to the dedicated hired channel
+        try {
+          const hireChannel = await client.channels.fetch(HIRE_CHANNEL_ID);
+          if (hireChannel?.isTextBased()) {
+            const guides      = ROLE_GUIDES[roleType];
+            const guideFields = guides
+              ? [
+                  { name: "📖 Guide",  value: guides.guide, inline: false },
+                  { name: "📋 Tasks",  value: guides.tasks, inline: false },
+                ]
+              : [];
+
+            const hireEmbed = new EmbedBuilder()
+              .setTitle(`🎉 New Staff Member Hired!`)
+              .setColor(0x57f287)
+              .setDescription(`Congratulations to <@${applicantId}> on being accepted as **${meta.emoji} ${meta.label}** at **${sourceGuildName}**!`)
+              .addFields(
+                { name: "👤 Staff Member", value: `<@${applicantId}>`, inline: true },
+                { name: "📌 Role",         value: `${meta.emoji} ${meta.label}`, inline: true },
+                { name: "🏠 Server",       value: sourceGuildName, inline: true },
+                ...guideFields,
+              )
+              .setFooter({ text: guides ? "Please read your guide and tasks before getting started." : "Welcome to the team!" })
+              .setTimestamp();
+
+            await hireChannel.send({ content: `<@${applicantId}>`, embeds: [hireEmbed] });
+          }
+        } catch (err) {
+          console.error("[hire-announce] Failed to post hire embed:", err.message);
+        }
 
         // DM the applicant with congratulations + staff server invite
         try {
