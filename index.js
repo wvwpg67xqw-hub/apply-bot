@@ -814,7 +814,12 @@ client.on("interactionCreate", async (interaction) => {
           .setTitle(`✅ ${meta.label} Application Accepted — ${sourceGuildName}`);
         await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
         await interaction.reply({ content: `✅ **${meta.label}** application **accepted** by ${reviewer}.` });
-        try { await interaction.channel.setLocked(true); } catch {}
+        try {
+          await interaction.channel.edit({ locked: true, archived: true });
+        } catch (err) {
+          console.error("[lock] Failed to lock thread:", err.message);
+          await interaction.channel.send("⚠️ Could not lock this thread — make sure the bot has **Manage Threads** permission.").catch(() => {});
+        }
 
         // Grant team + normal roles in the source server
         const sourceGuild   = client.guilds.cache.find((g) => g.name === sourceGuildName);
@@ -886,7 +891,12 @@ client.on("interactionCreate", async (interaction) => {
           .setTitle(`❌ ${meta.label} Application Denied — ${sourceGuildName}`);
         await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
         await interaction.reply({ content: `❌ **${meta.label}** application **denied** by ${reviewer}.` });
-        try { await interaction.channel.setLocked(true); } catch {}
+        try {
+          await interaction.channel.edit({ locked: true, archived: true });
+        } catch (err) {
+          console.error("[lock] Failed to lock thread:", err.message);
+          await interaction.channel.send("⚠️ Could not lock this thread — make sure the bot has **Manage Threads** permission.").catch(() => {});
+        }
 
         const resultEmbed = new EmbedBuilder()
           .setTitle(`❌ Application Denied`)
@@ -918,7 +928,12 @@ client.on("interactionCreate", async (interaction) => {
           .setTitle(`🚫 ${meta.label} Application Denied & Blacklisted — ${sourceGuildName}`);
         await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
         await interaction.reply({ content: `🚫 **${meta.label}** application **denied & user blacklisted** by ${reviewer}.` });
-        try { await interaction.channel.setLocked(true); } catch {}
+        try {
+          await interaction.channel.edit({ locked: true, archived: true });
+        } catch (err) {
+          console.error("[lock] Failed to lock thread:", err.message);
+          await interaction.channel.send("⚠️ Could not lock this thread — make sure the bot has **Manage Threads** permission.").catch(() => {});
+        }
 
         const resultEmbed = new EmbedBuilder()
           .setTitle(`🚫 Application Denied & Blacklisted`)
