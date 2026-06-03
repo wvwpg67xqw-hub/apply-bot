@@ -704,10 +704,18 @@ client.on("interactionCreate", async (interaction) => {
 
       const guildConfig = getGuild(destGuild.id);
       const hrRole      = resolveHRRole(sourceGuildName, destGuild, guildConfig?.hrRole);
-      const isHR        = hrRole && interaction.member.roles.cache.has(hrRole.id);
 
-      if (!isAdmin && !isHR) {
-        return interaction.reply({ content: "❌ You don't have permission to manage applications.", ephemeral: true });
+      // If an HR role exists → must have it (admin alone is not enough).
+      // If no HR role is configured → fall back to admin-only access.
+      const hasAccess = hrRole
+        ? interaction.member.roles.cache.has(hrRole.id)
+        : isAdmin;
+
+      if (!hasAccess) {
+        const msg = hrRole
+          ? `❌ You need the <@&${hrRole.id}> role to manage applications.`
+          : "❌ You don't have permission to manage applications.";
+        return interaction.reply({ content: msg, ephemeral: true });
       }
 
       const msg            = interaction.message;
