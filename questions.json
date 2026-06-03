@@ -34,15 +34,13 @@
     "Is there anything else you would like to add?"
   ],
   "partnership": [
-    "What is your username and age?",
-    "What timezone are you in and how many hours per day can you dedicate to partnerships?",
-    "Do you have any previous experience managing server partnerships? If yes, describe it.",
-    "Why do you want to be a Partnership Manager for this server?",
-    "How would you approach reaching out to another server about a potential partnership?",
-    "What qualities or criteria do you look for in a server before partnering with them?",
-    "How would you handle a partner server that is breaking the terms of your partnership agreement?",
-    "How do you plan to keep track of active partners and follow up with them regularly?",
-    "Are you currently a partnership manager in any other servers? If so, which ones?",
-    "Is there anything else you'd like us to know about you?"
+    "What is your Discord username and ID?",
+    "How old are you?",
+    "What timezone are you in, and what is your typical availability?",
+    "Why do you want to become a Partnership Manager in our server?",
+    "Do you have any previous experience with partnerships, advertising, or management? If so, briefly describe it.",
+    "What qualities do you think make a good Partnership Manager?",
+    "Why should we choose you over others for this role?",
+    "Is there anything else you'd like to add?"
   ]
 }
