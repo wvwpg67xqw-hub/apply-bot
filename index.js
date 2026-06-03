@@ -13,6 +13,7 @@ const {
 } = require("discord.js");
 const { read, write } = require("./utils/jsondb");
 const questions = require("./questions.json");
+const log = require("./utils/logger");
 
 const GUILDS_PATH  = "./data/guilds.json";
 const CONFIG_PATH  = "./data/config.json";
@@ -191,7 +192,7 @@ async function autoLinkNewGuild(client, guild) {
   if (!ch) return;
 
   setGuildConfig(guild.id, { routeChannelId: ch.id });
-  console.log(`🔗 Auto-linked [${guild.name}] → #${ch.name}`);
+  log.info("LINK", `Auto-linked [${guild.name}] → #${ch.name}`);
 }
 
 // ─── Role & channel resolution ────────────────────────────────────────────────
@@ -212,7 +213,7 @@ async function resolveAppChannel(client, sourceGuild, guildConfig) {
       const ch = await client.channels.fetch(guildConfig.routeChannelId);
       if (ch) return { channel: ch, guild: ch.guild };
     } catch (e) {
-      console.warn(`[warn] Could not fetch routeChannelId ${guildConfig.routeChannelId}:`, e.message);
+      log.warn("ROUTE", `Could not fetch routeChannelId ${guildConfig.routeChannelId}`, e.message);
     }
   }
   if (guildConfig?.applicationChannel) {
@@ -434,7 +435,7 @@ async function runApplication(client, user, sourceGuild, roleType) {
       reason:    `${meta.label} application from ${user.tag} in ${sourceGuild.name}`,
     });
   } catch (err) {
-    console.error("Failed to create private thread:", err);
+    log.error("APP", "Failed to create private thread", err.message);
     await dmChannel.send("❌ Could not create a private thread. Please contact an admin.");
     return { ok: false, reason: "no_thread" };
   }
@@ -448,7 +449,7 @@ async function runApplication(client, user, sourceGuild, roleType) {
     components: [buildReviewRow()],
   });
 
-  console.log(`📄 [${sourceGuild.name}] ${meta.label} → #${appChannel.name} in [${destGuild.name}] | ${user.tag}`);
+  log.info("APP", `Submitted | [${sourceGuild.name}] ${meta.label} → #${appChannel.name} in [${destGuild.name}] | ${user.tag}`);
   return { ok: true };
 }
 
@@ -464,15 +465,16 @@ const client = new Client({
 });
 
 client.once("ready", async () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
+  log.info("BOT", `Logged in as ${client.user.tag} (${client.user.id})`);
+  log.info("BOT", `In ${client.guilds.cache.size} guild(s)`);
 
   const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
   try {
-    console.log("🔄 Registering global slash commands...");
+    log.info("COMMANDS", "Registering global slash commands...");
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    console.log(`✅ Registered ${commands.length} slash commands globally.`);
+    log.info("COMMANDS", `Registered ${commands.length} slash commands globally`);
   } catch (err) {
-    console.error("❌ Failed to register slash commands:", err);
+    log.error("COMMANDS", "Failed to register slash commands", err.message);
   }
 
   // Link any unlinked guilds if a staff server is already configured
@@ -491,7 +493,7 @@ client.once("ready", async () => {
         );
         if (ch) {
           setGuildConfig(guild.id, { routeChannelId: ch.id });
-          console.log(`🔗 Linked [${guild.name}] → #${ch.name}`);
+          log.info("LINK", `Linked [${guild.name}] → #${ch.name}`);
         }
       }
     }
@@ -499,7 +501,7 @@ client.once("ready", async () => {
 });
 
 client.on("guildCreate", async (guild) => {
-  console.log(`➕ Joined guild: ${guild.name}`);
+  log.info("GUILD", `Joined guild: ${guild.name}`);
   await autoLinkNewGuild(client, guild);
 });
 
@@ -510,6 +512,7 @@ client.on("interactionCreate", async (interaction) => {
   // ── Slash commands ──────────────────────────────────────────────────────────
   if (interaction.isChatInputCommand()) {
     const { commandName, guild, user } = interaction;
+    log.info("CMD", `/${commandName} — ${user.tag} (${user.id}) in [${guild?.name}]`);
 
     // /setstaffserver
     if (commandName === "setstaffserver") {
@@ -518,7 +521,7 @@ client.on("interactionCreate", async (interaction) => {
       try {
         summary = await autoSetupStaffChannels(client, guild);
       } catch (err) {
-        console.error("autoSetupStaffChannels error:", err);
+        log.error("SETUP", "autoSetupStaffChannels error", err.message);
         return interaction.editReply(`❌ Something went wrong: ${err.message}`);
       }
       const embed = new EmbedBuilder()
@@ -672,7 +675,7 @@ client.on("interactionCreate", async (interaction) => {
           ephemeral: true,
         });
       } catch (err) {
-        console.error("[setacceptroles] Error:", err);
+        log.error("SETROLES", "setacceptroles error", err.message);
         return interaction.reply({
           content: `❌ Something went wrong while saving roles: ${err.message}`,
           ephemeral: true,
@@ -804,11 +807,14 @@ client.on("interactionCreate", async (interaction) => {
       const roleType        = typeMatch ? typeMatch[1] : "hr";
       const meta            = ROLE_TYPES[roleType] || ROLE_TYPES.hr;
 
+      log.info("REVIEW", `Button: ${interaction.customId} — ${interaction.user.tag} (${interaction.user.id}) in [${destGuild.name}] | source: ${sourceGuildName} | type: ${roleType}`);
+
       // Fetch the member fresh so we always have their real current roles
       let reviewer_member;
       try {
         reviewer_member = await destGuild.members.fetch(interaction.user.id);
-      } catch {
+      } catch (err) {
+        log.warn("REVIEW", "Could not fetch reviewer member fresh, falling back to interaction.member", err.message);
         reviewer_member = interaction.member;
       }
 
@@ -820,7 +826,18 @@ client.on("interactionCreate", async (interaction) => {
         : false;
       const hasAccess = hasReviewerRole || isAdmin;
 
+      log.debug("REVIEW", "Permission check", {
+        reviewer:       interaction.user.tag,
+        reviewerRoles:  [...reviewer_member.roles.cache.keys()],
+        sourceGuild:    sourceGuildName,
+        requiredRoleId: reviewerRoleId ?? "none",
+        hasReviewerRole,
+        isAdmin,
+        hasAccess,
+      });
+
       if (!hasAccess) {
+        log.warn("REVIEW", `Access denied for ${interaction.user.tag} — missing role ${reviewerRoleId}`);
         const roleTag = reviewerRoleId ? `<@&${reviewerRoleId}>` : "the correct reviewer role";
         return interaction.reply({
           content: `❌ You need the ${roleTag} role to manage applications from **${sourceGuildName}**.`,
@@ -856,22 +873,26 @@ client.on("interactionCreate", async (interaction) => {
         try {
           await interaction.channel.edit({ locked: true, archived: true });
         } catch (err) {
-          console.error("[lock] Failed to lock thread:", err.message);
+          log.error("LOCK", "Failed to lock thread", err.message);
           await interaction.channel.send("⚠️ Could not lock this thread — make sure the bot has **Manage Threads** permission.").catch(() => {});
         }
 
         // Grant team + normal roles in the source server
-        const sourceGuild   = client.guilds.cache.find((g) => g.name === sourceGuildName);
+        const sourceGuild    = client.guilds.cache.find((g) => g.name === sourceGuildName);
         const sourceGuildCfg = sourceGuild ? getGuild(sourceGuild.id) : null;
-        const rolesGranted  = [];
-        const roleErrors    = [];
+        const rolesGranted   = [];
+        const roleErrors     = [];
+
+        log.info("ACCEPT", `Accepted by ${reviewer} | applicant: ${applicantId} | type: ${roleType} | server: ${sourceGuildName}`);
+        log.debug("ACCEPT", "Source guild lookup", { found: !!sourceGuild, hasCfg: !!sourceGuildCfg, cfg: sourceGuildCfg });
 
         if (sourceGuild && sourceGuildCfg) {
           let member = null;
-          try { member = await sourceGuild.members.fetch(applicantId); } catch {}
+          try { member = await sourceGuild.members.fetch(applicantId); } catch (err) {
+            log.warn("ACCEPT", `Could not fetch applicant ${applicantId} from [${sourceGuildName}]`, err.message);
+          }
 
           if (member) {
-            // Pick the two role IDs for this application type
             const typeRoleKeys = {
               hr:          ["hrRoleId",          "hrTeamRoleId"],
               mod:         ["modRoleId",          "modTeamRoleId"],
@@ -881,17 +902,25 @@ client.on("interactionCreate", async (interaction) => {
             for (const [key, label] of [[specificKey, "role"], [teamKey, "team role"]]) {
               if (!key) continue;
               const roleId = sourceGuildCfg[key];
-              if (!roleId) continue;
+              if (!roleId) {
+                log.warn("ACCEPT", `No saved role ID for key "${key}" in [${sourceGuildName}] config`);
+                continue;
+              }
               try {
                 await member.roles.add(roleId);
                 rolesGranted.push(`<@&${roleId}>`);
-              } catch {
+                log.info("ACCEPT", `Granted role ${roleId} (${label}) to ${applicantId} in [${sourceGuildName}]`);
+              } catch (err) {
+                log.error("ACCEPT", `Failed to grant role ${roleId} (${label}) to ${applicantId}`, err.message);
                 roleErrors.push(label);
               }
             }
           } else {
+            log.warn("ACCEPT", `Applicant ${applicantId} not found in [${sourceGuildName}]`);
             roleErrors.push("member not found in source server");
           }
+        } else {
+          log.warn("ACCEPT", `Could not find source guild or config for "${sourceGuildName}"`);
         }
 
         // Report role grant outcome in the thread
@@ -940,7 +969,7 @@ client.on("interactionCreate", async (interaction) => {
         try {
           await interaction.channel.edit({ locked: true, archived: true });
         } catch (err) {
-          console.error("[lock] Failed to lock thread:", err.message);
+          log.error("LOCK", "Failed to lock thread", err.message);
           await interaction.channel.send("⚠️ Could not lock this thread — make sure the bot has **Manage Threads** permission.").catch(() => {});
         }
 
@@ -977,7 +1006,7 @@ client.on("interactionCreate", async (interaction) => {
         try {
           await interaction.channel.edit({ locked: true, archived: true });
         } catch (err) {
-          console.error("[lock] Failed to lock thread:", err.message);
+          log.error("LOCK", "Failed to lock thread", err.message);
           await interaction.channel.send("⚠️ Could not lock this thread — make sure the bot has **Manage Threads** permission.").catch(() => {});
         }
 
@@ -1008,11 +1037,11 @@ client.on("interactionCreate", async (interaction) => {
 
 const token = process.env.DISCORD_TOKEN;
 if (!token) {
-  console.error("❌ DISCORD_TOKEN is not set. Please add it as a secret.");
+  log.error("BOT", "DISCORD_TOKEN is not set — add it as a secret");
   process.exit(1);
 }
 
 client.login(token).catch((err) => {
-  console.error("❌ Failed to login:", err.message);
+  log.error("BOT", "Failed to login", err.message);
   process.exit(1);
 });
