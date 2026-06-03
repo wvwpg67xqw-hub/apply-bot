@@ -624,6 +624,24 @@ client.on("guildCreate", async (guild) => {
   await autoLinkNewGuild(client, guild);
 });
 
+const AUTO_UNBLACKLIST_ROLE = "1487774070094168135";
+
+client.on("guildMemberUpdate", async (oldMember, newMember) => {
+  const gained = !oldMember.roles.cache.has(AUTO_UNBLACKLIST_ROLE) &&
+                  newMember.roles.cache.has(AUTO_UNBLACKLIST_ROLE);
+  if (!gained) return;
+
+  const removed = removeFromBlacklist(newMember.guild.id, newMember.id);
+  if (removed) {
+    log.info("UNBLACKLIST", `Auto-unblacklisted ${newMember.user.tag} (${newMember.id}) in [${newMember.guild.name}] — gained role ${AUTO_UNBLACKLIST_ROLE}`);
+    try {
+      await newMember.send(
+        `✅ You have been automatically removed from the blacklist in **${newMember.guild.name}** because you were granted a trusted role.`
+      );
+    } catch {}
+  }
+});
+
 // ─── Interaction handler ──────────────────────────────────────────────────────
 
 client.on("interactionCreate", async (interaction) => {
