@@ -26,48 +26,43 @@ const ROLE_TYPES = {
   partnership: { label: "Partnership Manager", emoji: "🤝", color: 0xfee75c },
 };
 
-// ─── Staff reviewer roles (any one of these grants accept/deny/blacklist access) ─
-
-const REVIEWER_ROLE_IDS = new Set([
-  "1488369842225680465", // SA  — Shadow Advertising
-  "1488375799819276358", // AL  — Advertising Legends
-  "1488370171293733000", // DA  — Devil Advertising
-  "1488375900629106808", // PRP — Prime Promotions
-  "1488370139286995135", // PLP — Plain Promotions
-]);
-
 // ─── Per-server config map ────────────────────────────────────────────────────
 
 const SERVER_CONFIG_MAP = [
   {
-    match:        "plain promotions",
-    channelName:  "plain-promotions-apps",
-    channelNames: ["plain-promotions-apps", "plain-promotions", "pp-apps"],
-    roleName:     "Plain Promotions Apps",
+    match:          "plain promotions",
+    channelName:    "plain-promotions-apps",
+    channelNames:   ["plain-promotions-apps", "plain-promotions", "pp-apps"],
+    roleName:       "Plain Promotions Apps",
+    reviewerRoleId: "1488370139286995135",
   },
   {
-    match:        "advertising legends",
-    channelName:  "advertising-legends-apps",
-    channelNames: ["advertising-legends-apps", "advertising-legends", "al-apps"],
-    roleName:     "Advertising Legends Apps",
+    match:          "advertising legends",
+    channelName:    "advertising-legends-apps",
+    channelNames:   ["advertising-legends-apps", "advertising-legends", "al-apps"],
+    roleName:       "Advertising Legends Apps",
+    reviewerRoleId: "1488375799819276358",
   },
   {
-    match:        "devil advertising",
-    channelName:  "devil-advertising-apps",
-    channelNames: ["devil-advertising-apps", "devil-advertising", "da-apps"],
-    roleName:     "Devil Advertising Apps",
+    match:          "devil advertising",
+    channelName:    "devil-advertising-apps",
+    channelNames:   ["devil-advertising-apps", "devil-advertising", "da-apps"],
+    roleName:       "Devil Advertising Apps",
+    reviewerRoleId: "1488370171293733000",
   },
   {
-    match:        "prime promotions",
-    channelName:  "prime-promotions-apps",
-    channelNames: ["prime-promotions-apps", "prime-promotions", "pp-apps"],
-    roleName:     "Prime Promotions Apps",
+    match:          "prime promotions",
+    channelName:    "prime-promotions-apps",
+    channelNames:   ["prime-promotions-apps", "prime-promotions", "pp-apps"],
+    roleName:       "Prime Promotions Apps",
+    reviewerRoleId: "1488375900629106808",
   },
   {
-    match:        "shadow advertising",
-    channelName:  "shadow-advertising-apps",
-    channelNames: ["shadow-advertising-apps", "shadow-advertising", "sa-apps"],
-    roleName:     "Shadow Advertising Apps",
+    match:          "shadow advertising",
+    channelName:    "shadow-advertising-apps",
+    channelNames:   ["shadow-advertising-apps", "shadow-advertising", "sa-apps"],
+    roleName:       "Shadow Advertising Apps",
+    reviewerRoleId: "1488369842225680465",
   },
 ];
 
@@ -809,12 +804,17 @@ client.on("interactionCreate", async (interaction) => {
       const roleType        = typeMatch ? typeMatch[1] : "hr";
       const meta            = ROLE_TYPES[roleType] || ROLE_TYPES.hr;
 
-      const hasReviewerRole = interaction.member.roles.cache.some((r) => REVIEWER_ROLE_IDS.has(r.id));
-      const hasAccess       = hasReviewerRole || isAdmin;
+      const serverEntry     = getServerConfig(sourceGuildName);
+      const reviewerRoleId  = serverEntry?.reviewerRoleId;
+      const hasReviewerRole = reviewerRoleId
+        ? interaction.member.roles.cache.has(reviewerRoleId)
+        : false;
+      const hasAccess = hasReviewerRole || isAdmin;
 
       if (!hasAccess) {
+        const roleTag = reviewerRoleId ? `<@&${reviewerRoleId}>` : "the correct reviewer role";
         return interaction.reply({
-          content: "❌ You need one of the designated reviewer roles to manage applications.",
+          content: `❌ You need the ${roleTag} role to manage applications from **${sourceGuildName}**.`,
           ephemeral: true,
         });
       }
