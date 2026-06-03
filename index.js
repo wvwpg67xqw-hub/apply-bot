@@ -15,10 +15,35 @@ const { read, write } = require("./utils/jsondb");
 const questions = require("./questions.json");
 const log = require("./utils/logger");
 
-const GUILDS_PATH  = "./data/guilds.json";
-const CONFIG_PATH  = "./data/config.json";
-const STAFF_INVITE = "https://discord.gg/qcXfZqQVC4";
+const GUILDS_PATH          = "./data/guilds.json";
+const CONFIG_PATH          = "./data/config.json";
+const STAFF_INVITE         = "https://discord.gg/qcXfZqQVC4";
+const BLACKLIST_LOG_CHANNEL = "1492165517279232090";
 
+
+// ─── Blacklist log helper ─────────────────────────────────────────────────────
+
+async function sendBlacklistLog(clientRef, { applicantId, applicantTag, roleLabel, roleEmoji, sourceGuildName, moderator, reason }) {
+  try {
+    const ch = await clientRef.channels.fetch(BLACKLIST_LOG_CHANNEL);
+    if (!ch?.isTextBased()) return;
+    const embed = new EmbedBuilder()
+      .setTitle("🚫 User Blacklisted")
+      .setColor(0x000000)
+      .addFields(
+        { name: "User",    value: applicantTag ? `<@${applicantId}> (${applicantTag})` : `<@${applicantId}>`, inline: false },
+        { name: "Server",  value: sourceGuildName, inline: true },
+        { name: "Role",    value: `${roleEmoji} ${roleLabel}`,  inline: true },
+        { name: "By",      value: moderator,        inline: true },
+      )
+      .setTimestamp();
+    if (reason) embed.addFields({ name: "Reason", value: reason, inline: false });
+    await ch.send({ embeds: [embed] });
+    log.info("BLACKLIST", `Log posted to channel ${BLACKLIST_LOG_CHANNEL}`);
+  } catch (err) {
+    log.error("BLACKLIST", "Failed to post to blacklist log channel", err.message);
+  }
+}
 
 // ─── Role type metadata ───────────────────────────────────────────────────────
 
@@ -687,6 +712,14 @@ client.on("interactionCreate", async (interaction) => {
     if (commandName === "blacklist") {
       const target = interaction.options.getUser("user");
       addToBlacklist(guild.id, target.id);
+      await sendBlacklistLog(client, {
+        applicantId:     target.id,
+        applicantTag:    target.tag,
+        roleLabel:       "Manual",
+        roleEmoji:       "🚫",
+        sourceGuildName: guild.name,
+        moderator:       interaction.user.tag,
+      });
       return interaction.reply({ content: `🚫 ${target} has been blacklisted from applying.`, ephemeral: true });
     }
 
@@ -1017,6 +1050,14 @@ client.on("interactionCreate", async (interaction) => {
           )
           .setTimestamp();
         await postResult(resultEmbed);
+        await sendBlacklistLog(client, {
+          applicantId:     applicantId,
+          applicantTag:    applicantUser?.tag,
+          roleLabel:       meta.label,
+          roleEmoji:       meta.emoji,
+          sourceGuildName: sourceGuildName,
+          moderator:       reviewer,
+        });
 
         try {
           await applicantUser?.send(
