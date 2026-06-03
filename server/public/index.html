@@ -366,7 +366,9 @@ async function loadServers() {
 
     if (g.icon) {
       const img = document.createElement("img");
-      img.src = g.icon; img.alt = g.name;
+      img.src     = g.icon;
+      img.alt     = g.name;
+      img.onerror = () => { img.style.display = "none"; el.appendChild(document.createTextNode(g.name.split(" ").map(w=>w[0]).join("").slice(0,3))); img.onerror = null; };
       el.appendChild(img);
     } else {
       el.appendChild(document.createTextNode(g.name.split(" ").map(w=>w[0]).join("").slice(0,3)));
@@ -441,8 +443,10 @@ async function selectChannel(id, name) {
 
   const msgs = await api("GET", `/api/channels/${id}/messages?limit=50`);
   $("messages").innerHTML = "";
+  lastAuthorId  = null;
+  lastTimestamp = 0;
   for (const m of msgs) appendMessage(m);
-  $("messages").scrollTop = $("messages").scrollHeight;
+  scrollBottom();
 }
 
 function appendMessage(m, scroll = false) {
@@ -474,6 +478,7 @@ function appendMessage(m, scroll = false) {
     avatar.src       = m.avatar;
     avatar.alt       = m.author;
     avatar.title     = `DM ${m.author.replace(/#\d{4}$/, "")}`;
+    avatar.onerror   = () => { avatar.src = `https://cdn.discordapp.com/embed/avatars/${BigInt(m.authorId) % 6n}.png`; avatar.onerror = null; };
     avatar.addEventListener("click", () => openDmModal(m.authorId, m.author));
     wrap.appendChild(avatar);
 
@@ -603,13 +608,82 @@ $("dm-send").addEventListener("click", async () => {
   }
 });
 
-// ── SSE: live messages ─────────────────────────────────────────────────────────
+// ── SSE: live updates ─────────────────────────────────────────────────────────
 const evtSource = new EventSource("/events");
+
+// helpers
+function isNearBottom() {
+  const el = $("messages");
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+}
+function scrollBottom() {
+  const el = $("messages");
+  el.scrollTop = el.scrollHeight;
+}
+
+// new message
 evtSource.addEventListener("message", e => {
   const m = JSON.parse(e.data);
   if (m.channelId !== currentChannelId) return;
-  appendMessage(m, true);
+  const atBottom = isNearBottom();
+  appendMessage(m, false);
+  if (atBottom) scrollBottom();
 });
+
+// edited message
+evtSource.addEventListener("messageUpdate", e => {
+  const { id, channelId, content } = JSON.parse(e.data);
+  if (channelId !== currentChannelId) return;
+  const wrap = document.querySelector(`[data-msg-id="${id}"]`);
+  if (!wrap) return;
+  const body = wrap.querySelector(".msg-body:not(.embed-hint)");
+  if (body) {
+    body.textContent = content;
+    body.style.color = "var(--text-muted)";
+    const tag = document.createElement("span");
+    tag.style.cssText = "font-size:10px;color:var(--text-muted);margin-left:4px;";
+    tag.textContent = "(edited)";
+    if (!body.querySelector("span")) body.appendChild(tag);
+  }
+});
+
+// deleted message
+evtSource.addEventListener("messageDelete", e => {
+  const { id, channelId } = JSON.parse(e.data);
+  if (channelId !== currentChannelId) return;
+  const wrap = document.querySelector(`[data-msg-id="${id}"]`);
+  if (wrap) {
+    wrap.style.opacity = "0.35";
+    wrap.style.textDecoration = "line-through";
+    wrap.querySelectorAll(".msg-body").forEach(b => b.textContent = "[message deleted]");
+  }
+});
+
+// typing indicator
+let typingTimeout = null;
+const typingUsers = new Set();
+evtSource.addEventListener("typing", e => {
+  const { channelId, tag } = JSON.parse(e.data);
+  if (channelId !== currentChannelId) return;
+  const name = tag.replace(/#\d{4}$/, "");
+  typingUsers.add(name);
+  renderTyping();
+  clearTimeout(typingTimeout);
+  typingTimeout = setTimeout(() => { typingUsers.clear(); renderTyping(); }, 6000);
+});
+
+function renderTyping() {
+  let bar = $("typing-bar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "typing-bar";
+    bar.style.cssText = "font-size:12px;color:var(--text-muted);padding:2px 16px 4px;min-height:18px;";
+    $("input-area").prepend(bar);
+  }
+  if (typingUsers.size === 0) { bar.textContent = ""; return; }
+  const names = [...typingUsers];
+  bar.innerHTML = `<em>${names.join(", ")} ${names.length === 1 ? "is" : "are"} typing…</em>`;
+}
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 (async () => {

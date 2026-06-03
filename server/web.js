@@ -32,17 +32,32 @@ function startWebServer(client, port) {
     for (const res of sseClients) res.write(payload);
   }
 
-  client.on("messageCreate", (msg) => {
-    broadcast("message", {
-      id:         msg.id,
-      channelId:  msg.channelId,
-      content:    msg.content,
-      author:     msg.author.tag,
-      authorId:   msg.author.id,
-      avatar:     msg.author.displayAvatarURL({ size: 32 }),
-      bot:        msg.author.bot,
-      timestamp:  msg.createdTimestamp,
-    });
+  function msgPayload(msg) {
+    return {
+      id:        msg.id,
+      channelId: msg.channelId,
+      content:   msg.content,
+      author:    msg.author.tag,
+      authorId:  msg.author.id,
+      avatar:    msg.author.displayAvatarURL({ size: 64, extension: "png", forceStatic: false }),
+      bot:       msg.author.bot,
+      timestamp: msg.createdTimestamp,
+      embeds:    msg.embeds.length,
+    };
+  }
+
+  client.on("messageCreate", (msg) => broadcast("message", msgPayload(msg)));
+
+  client.on("messageUpdate", (_, msg) => {
+    if (!msg.partial) broadcast("messageUpdate", { id: msg.id, channelId: msg.channelId, content: msg.content ?? "" });
+  });
+
+  client.on("messageDelete", (msg) => {
+    broadcast("messageDelete", { id: msg.id, channelId: msg.channelId });
+  });
+
+  client.on("typingStart", (typing) => {
+    broadcast("typing", { channelId: typing.channel.id, userId: typing.user.id, tag: typing.user.tag });
   });
 
   // ── API: bot info ─────────────────────────────────────────────────────────────

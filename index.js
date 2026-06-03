@@ -180,9 +180,12 @@ function removeFromBlacklistAllGuilds(userId) {
   return totalRemoved;
 }
 
-// ─── Staff invite generator (1-use, 30-min) ──────────────────────────────────
+// ─── Staff invite — cached, auto-rotating every 30 min ───────────────────────
 
-async function generateStaffInvite(client) {
+let _cachedInviteUrl  = null;
+let _inviteRefreshTimer = null;
+
+async function _buildInvite(client) {
   const cfg = getConfig();
   if (!cfg.staffGuildId) return null;
   const staffGuild = client.guilds.cache.get(cfg.staffGuildId);
@@ -194,24 +197,44 @@ async function generateStaffInvite(client) {
   }
   if (!channel) {
     channel = staffGuild.channels.cache.find(
-      (c) => c.type === ChannelType.GuildText && c.permissionsFor(staffGuild.members.me)?.has("CreateInstantInvite")
+      (c) => c.type === ChannelType.GuildText &&
+             c.permissionsFor(staffGuild.members.me)?.has("CreateInstantInvite")
     ) ?? null;
   }
   if (!channel) return null;
 
   try {
     const invite = await channel.createInvite({
-      maxAge:   1800,
-      maxUses:  1,
-      unique:   true,
-      reason:   "Staff application acceptance — single-use 30 min invite",
+      maxAge:  1800,
+      maxUses: 1,
+      unique:  true,
+      reason:  "Staff application acceptance — single-use 30 min rotating invite",
     });
-    log.info("INVITE", `Generated invite ${invite.code} for ${invite.channel.name} (1 use, 30 min)`);
+    log.info("INVITE", `Generated invite ${invite.code} → #${invite.channel.name} (1 use, 30 min)`);
     return invite.url;
   } catch (err) {
     log.error("INVITE", "Failed to generate invite", err.message);
     return null;
   }
+}
+
+async function startInviteRotation(client) {
+  if (_inviteRefreshTimer) clearInterval(_inviteRefreshTimer);
+  _cachedInviteUrl = await _buildInvite(client);
+
+  _inviteRefreshTimer = setInterval(async () => {
+    log.info("INVITE", "30-min rotation — generating new invite...");
+    _cachedInviteUrl = await _buildInvite(client);
+  }, 30 * 60 * 1000);
+}
+
+async function generateStaffInvite(client) {
+  // If the cached invite was already consumed (1-use), build a fresh one immediately
+  if (!_cachedInviteUrl) _cachedInviteUrl = await _buildInvite(client);
+  const url = _cachedInviteUrl;
+  _cachedInviteUrl = null;               // mark consumed — next call rebuilds
+  _buildInvite(client).then(u => { _cachedInviteUrl = u; }); // pre-warm next
+  return url;
 }
 
 // ─── Application ID helpers ───────────────────────────────────────────────────
@@ -640,6 +663,8 @@ const client = new Client({
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMessageTyping,
+    GatewayIntentBits.DirectMessageTyping,
   ],
 });
 
@@ -682,6 +707,8 @@ client.once("ready", async () => {
 
   const webPort = parseInt(process.env.PORT ?? "3000", 10);
   startWebServer(client, webPort);
+
+  await startInviteRotation(client);
 });
 
 client.on("guildCreate", async (guild) => {
