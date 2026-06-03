@@ -164,6 +164,22 @@ function removeFromBlacklist(guildId, userId) {
   return guilds[idx].blacklist.length < before;
 }
 
+// Removes a user from the blacklist in every guild (handles cross-server reviews)
+function removeFromBlacklistAllGuilds(userId) {
+  const guilds = getGuilds();
+  let totalRemoved = 0;
+  for (const g of guilds) {
+    if (!Array.isArray(g.blacklist)) continue;
+    const before = g.blacklist.length;
+    g.blacklist = g.blacklist.filter(
+      (e) => (typeof e === "string" ? e : e.userId) !== userId
+    );
+    totalRemoved += before - g.blacklist.length;
+  }
+  if (totalRemoved > 0) write(GUILDS_PATH, guilds);
+  return totalRemoved;
+}
+
 // ─── Application ID helpers ───────────────────────────────────────────────────
 
 function getApps() {
@@ -859,11 +875,11 @@ client.on("interactionCreate", async (interaction) => {
     // /unblacklist
     if (commandName === "unblacklist") {
       const target  = interaction.options.getUser("user");
-      const removed = removeFromBlacklist(guild.id, target.id);
+      const count   = removeFromBlacklistAllGuilds(target.id);
       return interaction.reply({
-        content: removed
-          ? `✅ ${target} has been removed from the blacklist.`
-          : `⚠️ That user is not blacklisted.`,
+        content: count > 0
+          ? `✅ ${target} has been removed from the blacklist${count > 1 ? ` across ${count} server(s)` : ""}.`
+          : `⚠️ That user is not blacklisted in any server.`,
         ephemeral: true,
       });
     }
