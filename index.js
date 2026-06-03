@@ -796,7 +796,6 @@ client.on("interactionCreate", async (interaction) => {
     // ── Review buttons (accept / deny / blacklist) ──
     if (["app_accept", "app_deny", "app_blacklist"].includes(interaction.customId)) {
       const destGuild = interaction.guild;
-      const isAdmin   = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
       const footer          = interaction.message.embeds[0]?.footer?.text ?? "";
       const fromMatch       = footer.match(/From:\s*([^•]+)/);
@@ -805,10 +804,19 @@ client.on("interactionCreate", async (interaction) => {
       const roleType        = typeMatch ? typeMatch[1] : "hr";
       const meta            = ROLE_TYPES[roleType] || ROLE_TYPES.hr;
 
+      // Fetch the member fresh so we always have their real current roles
+      let reviewer_member;
+      try {
+        reviewer_member = await destGuild.members.fetch(interaction.user.id);
+      } catch {
+        reviewer_member = interaction.member;
+      }
+
+      const isAdmin         = reviewer_member.permissions.has(PermissionsBitField.Flags.Administrator);
       const serverEntry     = getServerConfig(sourceGuildName);
       const reviewerRoleId  = serverEntry?.reviewerRoleId;
       const hasReviewerRole = reviewerRoleId
-        ? interaction.member.roles.cache.has(reviewerRoleId)
+        ? reviewer_member.roles.cache.has(reviewerRoleId)
         : false;
       const hasAccess = hasReviewerRole || isAdmin;
 
