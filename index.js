@@ -15,29 +15,36 @@ const { read, write } = require("./utils/jsondb");
 const questions = require("./questions.json");
 const log = require("./utils/logger");
 
-const GUILDS_PATH          = "./data/guilds.json";
-const CONFIG_PATH          = "./data/config.json";
-const STAFF_INVITE         = "https://discord.gg/qcXfZqQVC4";
+const GUILDS_PATH           = "./data/guilds.json";
+const CONFIG_PATH           = "./data/config.json";
+const APPS_PATH             = "./data/applications.json";
+const STAFF_INVITE          = "https://discord.gg/qcXfZqQVC4";
 const BLACKLIST_LOG_CHANNEL = "1492165517279232090";
 
 
 // ─── Blacklist log helper ─────────────────────────────────────────────────────
 
-async function sendBlacklistLog(clientRef, { applicantId, applicantTag, roleLabel, roleEmoji, sourceGuildName, moderator, reason }) {
+async function sendBlacklistLog(clientRef, { applicantId, applicantTag, roleLabel, roleEmoji, sourceGuildName, moderator, reason, appId, expiresAt }) {
   try {
     const ch = await clientRef.channels.fetch(BLACKLIST_LOG_CHANNEL);
     if (!ch?.isTextBased()) return;
+    const userValue = applicantTag
+      ? `<@${applicantId}> (${applicantTag})\nID: \`${applicantId}\``
+      : `<@${applicantId}>\nID: \`${applicantId}\``;
     const embed = new EmbedBuilder()
       .setTitle("🚫 User Blacklisted")
       .setColor(0x000000)
       .addFields(
-        { name: "User",    value: applicantTag ? `<@${applicantId}> (${applicantTag})` : `<@${applicantId}>`, inline: false },
-        { name: "Server",  value: sourceGuildName, inline: true },
-        { name: "Role",    value: `${roleEmoji} ${roleLabel}`,  inline: true },
-        { name: "By",      value: moderator,        inline: true },
+        { name: "User",    value: userValue,                       inline: false },
+        { name: "Server",  value: sourceGuildName,                 inline: true },
+        { name: "Role",    value: `${roleEmoji} ${roleLabel}`,     inline: true },
+        { name: "By",      value: moderator,                       inline: true },
       )
       .setTimestamp();
-    if (reason) embed.addFields({ name: "Reason", value: reason, inline: false });
+    if (appId)     embed.addFields({ name: "App ID",   value: `\`${appId}\``,                                          inline: true });
+    if (expiresAt) embed.addFields({ name: "Expires",  value: `<t:${Math.floor(expiresAt / 1000)}:R>`,                 inline: true });
+    else           embed.addFields({ name: "Duration", value: "Permanent",                                             inline: true });
+    if (reason)    embed.addFields({ name: "Reason",   value: reason,                                                   inline: false });
     await ch.send({ embeds: [embed] });
     log.info("BLACKLIST", `Log posted to channel ${BLACKLIST_LOG_CHANNEL}`);
   } catch (err) {
@@ -117,19 +124,30 @@ function setGuildConfig(guildId, config) {
 }
 
 function isBlacklisted(guildId, userId) {
-  return getGuild(guildId)?.blacklist?.includes(userId) ?? false;
+  const blacklist = getGuild(guildId)?.blacklist;
+  if (!blacklist) return false;
+  const entry = blacklist.find((e) => (typeof e === "string" ? e : e.userId) === userId);
+  if (!entry) return false;
+  const expiresAt = typeof entry === "object" ? entry.expiresAt : null;
+  if (expiresAt && Date.now() > expiresAt) return false;
+  return true;
 }
 
-function addToBlacklist(guildId, userId) {
+function addToBlacklist(guildId, userId, expiresAt = null) {
   const guilds = getGuilds();
   let idx      = guilds.findIndex((g) => g.id === guildId);
+  const entry  = { userId, expiresAt };
   if (idx === -1) {
-    guilds.push({ id: guildId, blacklist: [userId] });
+    guilds.push({ id: guildId, blacklist: [entry] });
     write(GUILDS_PATH, guilds);
     return;
   }
   if (!Array.isArray(guilds[idx].blacklist)) guilds[idx].blacklist = [];
-  if (!guilds[idx].blacklist.includes(userId)) guilds[idx].blacklist.push(userId);
+  const existing = guilds[idx].blacklist.findIndex(
+    (e) => (typeof e === "string" ? e : e.userId) === userId
+  );
+  if (existing !== -1) guilds[idx].blacklist[existing] = entry;
+  else                 guilds[idx].blacklist.push(entry);
   write(GUILDS_PATH, guilds);
 }
 
@@ -141,6 +159,41 @@ function removeFromBlacklist(guildId, userId) {
   guilds[idx].blacklist = (guilds[idx].blacklist || []).filter((id) => id !== userId);
   write(GUILDS_PATH, guilds);
   return guilds[idx].blacklist.length < before;
+}
+
+// ─── Application ID helpers ───────────────────────────────────────────────────
+
+function getApps() {
+  return read(APPS_PATH);
+}
+
+function saveApp(appData) {
+  const apps = getApps();
+  apps.push(appData);
+  write(APPS_PATH, apps);
+}
+
+function getAppById(id) {
+  return getApps().find((a) => a.id === id.toUpperCase()) || null;
+}
+
+function generateAppId() {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let suffix = "";
+  for (let i = 0; i < 6; i++) suffix += chars[Math.floor(Math.random() * chars.length)];
+  return "APP-" + suffix;
+}
+
+// ─── Duration parser ──────────────────────────────────────────────────────────
+
+function parseDuration(str) {
+  if (!str || str.toLowerCase() === "permanent") return null;
+  const match = str.match(/^(\d+)\s*(m|h|d|w)$/i);
+  if (!match) return null;
+  const n = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  const ms = { m: 60_000, h: 3_600_000, d: 86_400_000, w: 604_800_000 };
+  return Date.now() + n * ms[unit];
 }
 
 // ─── Staff server channel setup ───────────────────────────────────────────────
@@ -339,6 +392,11 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addUserOption((o) =>
       o.setName("user").setDescription("The user to blacklist.").setRequired(true)
+    )
+    .addStringOption((o) =>
+      o.setName("duration")
+        .setDescription("How long to blacklist (e.g. 1h, 2d, 7d, 2w, permanent). Default: permanent.")
+        .setRequired(false)
     ),
 
   new SlashCommandBuilder()
@@ -347,6 +405,13 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
     .addUserOption((o) =>
       o.setName("user").setDescription("The user to unblacklist.").setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("application")
+    .setDescription("Look up a specific application by its ID.")
+    .addStringOption((o) =>
+      o.setName("id").setDescription("The application ID (e.g. APP-ABC123).").setRequired(true)
     ),
 
   new SlashCommandBuilder()
@@ -444,12 +509,14 @@ async function runApplication(client, user, sourceGuild, roleType) {
   await dmChannel.send("✅ **Your application has been submitted!** You'll be notified once a decision is made.");
 
   const crossServer = destGuild.id !== sourceGuild.id;
+  const appId = generateAppId();
+
   const embed = new EmbedBuilder()
     .setTitle(`${meta.emoji} ${meta.label} Application${crossServer ? ` — ${sourceGuild.name}` : ""}`)
     .setColor(meta.color)
     .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL() })
     .setTimestamp()
-    .setFooter({ text: `User ID: ${user.id} • From: ${sourceGuild.name} • Type: ${roleType}` });
+    .setFooter({ text: `User ID: ${user.id} • From: ${sourceGuild.name} • Type: ${roleType} • App: ${appId}` });
 
   questionSet.forEach((q, i) => {
     embed.addFields({ name: q, value: answers[i] || "*No answer*", inline: false });
@@ -478,7 +545,28 @@ async function runApplication(client, user, sourceGuild, roleType) {
     components: [buildReviewRow()],
   });
 
-  log.info("APP", `Submitted | [${sourceGuild.name}] ${meta.label} → #${appChannel.name} in [${destGuild.name}] | ${user.tag}`);
+  // Notify the parent channel without pinging — ping stays in the thread
+  try {
+    await appChannel.send({
+      content: `📥 New **${meta.label}** application from **${user.tag}** (${sourceGuild.name}) — ID: \`${appId}\`\n> Review it in ${thread}`,
+    });
+  } catch (err) {
+    log.warn("APP", "Could not send channel notification", err.message);
+  }
+
+  saveApp({
+    id:          appId,
+    threadId:    thread.id,
+    channelId:   appChannel.id,
+    guildId:     destGuild.id,
+    sourceGuild: sourceGuild.name,
+    roleType,
+    applicantId: user.id,
+    applicantTag: user.tag,
+    submittedAt: Date.now(),
+  });
+
+  log.info("APP", `Submitted | [${sourceGuild.name}] ${meta.label} → #${appChannel.name} in [${destGuild.name}] | ${user.tag} | ID: ${appId}`);
   return { ok: true };
 }
 
@@ -714,8 +802,18 @@ client.on("interactionCreate", async (interaction) => {
 
     // /blacklist
     if (commandName === "blacklist") {
-      const target = interaction.options.getUser("user");
-      addToBlacklist(guild.id, target.id);
+      const target      = interaction.options.getUser("user");
+      const durationStr = interaction.options.getString("duration") ?? "permanent";
+      const expiresAt   = parseDuration(durationStr);
+
+      if (durationStr.toLowerCase() !== "permanent" && expiresAt === null) {
+        return interaction.reply({
+          content: "❌ Invalid duration. Use formats like `1h`, `2d`, `7d`, `2w`, or `permanent`.",
+          ephemeral: true,
+        });
+      }
+
+      addToBlacklist(guild.id, target.id, expiresAt);
       await sendBlacklistLog(client, {
         applicantId:     target.id,
         applicantTag:    target.tag,
@@ -723,8 +821,16 @@ client.on("interactionCreate", async (interaction) => {
         roleEmoji:       "🚫",
         sourceGuildName: guild.name,
         moderator:       interaction.user.tag,
+        expiresAt,
       });
-      return interaction.reply({ content: `🚫 ${target} has been blacklisted from applying.`, ephemeral: true });
+
+      const durationDisplay = expiresAt
+        ? `until <t:${Math.floor(expiresAt / 1000)}:F>`
+        : "permanently";
+      return interaction.reply({
+        content: `🚫 ${target} has been blacklisted from applying ${durationDisplay}.`,
+        ephemeral: true,
+      });
     }
 
     // /unblacklist
@@ -737,6 +843,32 @@ client.on("interactionCreate", async (interaction) => {
           : `⚠️ That user is not blacklisted.`,
         ephemeral: true,
       });
+    }
+
+    // /application
+    if (commandName === "application") {
+      const rawId  = interaction.options.getString("id").trim();
+      const appRec = getAppById(rawId);
+      if (!appRec) {
+        return interaction.reply({
+          content: `❌ No application found with ID \`${rawId.toUpperCase()}\`. IDs look like \`APP-ABC123\`.`,
+          ephemeral: true,
+        });
+      }
+      const meta        = ROLE_TYPES[appRec.roleType] || ROLE_TYPES.hr;
+      const threadLink  = `https://discord.com/channels/${appRec.guildId}/${appRec.threadId}`;
+      const embed = new EmbedBuilder()
+        .setTitle(`${meta.emoji} Application \`${appRec.id}\``)
+        .setColor(meta.color)
+        .addFields(
+          { name: "Applicant",   value: `<@${appRec.applicantId}> (${appRec.applicantTag})`, inline: false },
+          { name: "Role",        value: `${meta.emoji} ${meta.label}`,                       inline: true  },
+          { name: "Server",      value: appRec.sourceGuild,                                  inline: true  },
+          { name: "Submitted",   value: `<t:${Math.floor(appRec.submittedAt / 1000)}:F>`,   inline: true  },
+          { name: "Thread",      value: `[Jump to thread](${threadLink})`,                   inline: false },
+        )
+        .setTimestamp();
+      return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
     // /panel
@@ -842,6 +974,8 @@ client.on("interactionCreate", async (interaction) => {
       const sourceGuildName = fromMatch ? fromMatch[1].trim() : destGuild.name;
       const typeMatch       = footer.match(/Type:\s*(\w+)/);
       const roleType        = typeMatch ? typeMatch[1] : "hr";
+      const appIdMatch      = footer.match(/App:\s*(APP-[A-Z0-9]+)/);
+      const appId           = appIdMatch ? appIdMatch[1] : null;
       const meta            = ROLE_TYPES[roleType] || ROLE_TYPES.hr;
 
       log.info("REVIEW", `Button: ${interaction.customId} — ${interaction.user.tag} (${interaction.user.id}) in [${destGuild.name}] | source: ${sourceGuildName} | type: ${roleType}`);
@@ -1061,6 +1195,7 @@ client.on("interactionCreate", async (interaction) => {
           roleEmoji:       meta.emoji,
           sourceGuildName: sourceGuildName,
           moderator:       reviewer,
+          appId:           appId,
         });
 
         try {
