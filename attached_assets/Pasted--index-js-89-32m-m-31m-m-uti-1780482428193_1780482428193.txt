@@ -1,0 +1,100 @@
+ index.js        | 89 [32m++++++++++++++++++++++++++++++++++++++++[m[31m-----------------[m
+ utils/logger.js | 32 [32m+++++++++++++++++++++[m
+ 2 files changed, 95 insertions(+), 26 deletions(-)
+ create mode 100644 utils/logger.js
+\[1G[0K|[1G[0K/[1G[0K-[1G[0K
+up to date, audited 27 packages in 2s
+-[1G[0K
+\[1G[0K7 packages are looking for funding
+\[1G[0K  run `npm fund` for details
+\[1G[0K
+found [32m[1m0[22m[39m vulnerabilities
+\[1G[0K\[1G[0K|[1G[0K/[1G[0K-[1G[0K\[1G[0K|[1G[0K/[1G[0K-[1G[0K\[1G[0K|[1G[0K/[1G[0K[1mnpm[22m [31merror[39m [94mcode[39m EROFS
+/[1G[0K[1mnpm[22m [31merror[39m [94msyscall[39m rename
+/[1G[0K[1mnpm[22m [31merror[39m [94mpath[39m /usr/local/lib/node_modules/ts-node
+/[1G[0K[1mnpm[22m [31merror[39m [94mdest[39m /usr/local/lib/node_modules/.ts-node-6zHekdFC
+/[1G[0K[1mnpm[22m [31merror[39m [94merrno[39m [33m-30[39m
+/[1G[0K[1mnpm[22m [31merror[39m [94mrofs[39m EROFS: read-only file system, rename '/usr/local/lib/node_modules/ts-node' -> '/usr/local/lib/node_modules/.ts-node-6zHekdFC'
+/[1G[0K[1mnpm[22m [31merror[39m [94mrofs[39m Often virtualized file systems, or other file systems that don't support symlinks, give this error.
+/[1G[0K[1mnpm[22m [31merror[39m A complete log of this run can be found in: /home/container/.npm/_logs/2026-06-03T10_25_19_732Z-debug-0.log
+/[1G[0K[32m[2026-06-03T10:25:26.889Z] [INFO] [BOT][0m Logged in as Eclipse Applications#0433 (1511590386311762022)
+[32m[2026-06-03T10:25:26.891Z] [INFO] [BOT][0m In 6 guild(s)
+[32m[2026-06-03T10:25:26.891Z] [INFO] [COMMANDS][0m Registering global slash commands...
+(node:50) DeprecationWarning: The ready event has been renamed to clientReady to distinguish it from the gateway READY event and will only emit under that name in v15. Please use clientReady instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[32m[2026-06-03T10:25:27.057Z] [INFO] [COMMANDS][0m Registered 10 slash commands globally
+(node:50) Warning: Supplying "ephemeral" for interaction response options is deprecated. Utilize flags instead.
+[32m[2026-06-03T10:26:16.747Z] [INFO] [APP][0m Submitted | [Devil Advertising] HR → #devil-advertising-apps in [Eclipse Network] | mycattiger
+[32m[2026-06-03T10:26:20.013Z] [INFO] [REVIEW][0m Button: app_accept — mycattiger (1453592157607825595) in [Eclipse Network] | source: Devil Advertising | type: hr
+[36m[2026-06-03T10:26:20.016Z] [DEBUG] [REVIEW][0m Permission check
+{
+  "reviewer": "mycattiger",
+  "reviewerRoles": [
+    "1487744336908124190",
+    "1487771497316749312",
+    "1488361098829758464",
+    "1488375223202873344",
+    "1488351416576643082",
+    "1488082727205998732",
+    "1488358409223802892",
+    "1488360982987149453",
+    "1488860688959934606",
+    "1492882321991270543",
+    "1488370566695092244",
+    "1488358517898219671",
+    "1488859128741892126",
+    "1488860573188755616",
+    "1488360370128289954",
+    "1492882167712448675",
+    "1488859083288350891",
+    "1492882284167303219",
+    "1488361047378231486",
+    "1488370139286995135",
+    "1492882100603584702",
+    "1488375799819276358",
+    "1487774070094168135",
+    "1488370049365573832",
+    "1488802974351491142",
+    "1488891675123257424",
+    "1488369842225680465",
+    "1492044823933358160",
+    "1488358993570037851",
+    "1488803013002002523",
+    "1488848894409314396",
+    "1488889829927289054",
+    "1488860822888251492",
+    "1488375005678141541",
+    "1488350791319162991",
+    "1488358496679366767",
+    "1488507032205131887",
+    "1492882514203906159",
+    "1488375900629106808",
+    "1488368875207790714"
+  ],
+  "sourceGuild": "Devil Advertising",
+  "requiredRoleId": "1488370171293733000",
+  "hasReviewerRole": false,
+  "isAdmin": true,
+  "hasAccess": true
+}
+[32m[2026-06-03T10:26:20.948Z] [INFO] [ACCEPT][0m Accepted by mycattiger | applicant: 1453592157607825595 | type: hr | server: Devil Advertising
+[36m[2026-06-03T10:26:20.949Z] [DEBUG] [ACCEPT][0m Source guild lookup
+{
+  "found": true,
+  "hasCfg": true,
+  "cfg": {
+    "blacklist": [],
+    "id": "1308214357725020240",
+    "routeChannelId": "1511591493847224340",
+    "hrRoleId": "1495161275481718834",
+    "hrTeamRoleId": "1495161122506932358",
+    "modRoleId": "1495161368897126400",
+    "modTeamRoleId": "1495161296394649700",
+    "partnershipRoleId": "1495760909103141024",
+    "partnershipTeamRoleId": "1495760909103141024"
+  }
+}
+[31m[2026-06-03T10:26:21.090Z] [ERROR] [ACCEPT][0m Failed to grant role 1495161275481718834 (role) to 1453592157607825595
+Missing Permissions
+[31m[2026-06-03T10:26:21.218Z] [ERROR] [ACCEPT][0m Failed to grant role 1495161122506932358 (team role) to 1453592157607825595
+Missing Permissions

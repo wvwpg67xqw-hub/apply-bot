@@ -818,21 +818,17 @@ client.on("interactionCreate", async (interaction) => {
         reviewer_member = interaction.member;
       }
 
-      const isAdmin         = reviewer_member.permissions.has(PermissionsBitField.Flags.Administrator);
       const serverEntry     = getServerConfig(sourceGuildName);
       const reviewerRoleId  = serverEntry?.reviewerRoleId;
-      const hasReviewerRole = reviewerRoleId
+      const hasAccess       = reviewerRoleId
         ? reviewer_member.roles.cache.has(reviewerRoleId)
         : false;
-      const hasAccess = hasReviewerRole || isAdmin;
 
       log.debug("REVIEW", "Permission check", {
         reviewer:       interaction.user.tag,
         reviewerRoles:  [...reviewer_member.roles.cache.keys()],
         sourceGuild:    sourceGuildName,
         requiredRoleId: reviewerRoleId ?? "none",
-        hasReviewerRole,
-        isAdmin,
         hasAccess,
       });
 
