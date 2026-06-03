@@ -14,13 +14,19 @@ const {
 const { read, write } = require("./utils/jsondb");
 const questions = require("./questions.json");
 
-const GUILDS_PATH  = "./data/guilds.json";
-const CONFIG_PATH  = "./data/config.json";
+const GUILDS_PATH = "./data/guilds.json";
+const CONFIG_PATH = "./data/config.json";
+
+// ─── Role type metadata ───────────────────────────────────────────────────────
+
+const ROLE_TYPES = {
+  hr:          { label: "HR",                  emoji: "👥", color: 0x5865f2 },
+  mod:         { label: "Moderator",           emoji: "🔨", color: 0xed4245 },
+  partnership: { label: "Partnership Manager", emoji: "🤝", color: 0xfee75c },
+};
 
 // ─── Per-server config map ────────────────────────────────────────────────────
-// `channelName` is the channel the bot will create in the staff server.
-// `channelNames` are fallback names to detect if the channel already exists.
-// `roleName` is the HR role to ping (looked up in the staff server).
+
 const SERVER_CONFIG_MAP = [
   {
     match:        "plain promotions",
@@ -59,10 +65,10 @@ function getServerConfig(guildName) {
   return SERVER_CONFIG_MAP.find((e) => lower.includes(e.match)) || null;
 }
 
-// ─── Global config (staff server ID, category ID) ────────────────────────────
+// ─── Global config ────────────────────────────────────────────────────────────
 
-function getConfig()          { return read(CONFIG_PATH); }
-function setConfig(updates)   { write(CONFIG_PATH, { ...getConfig(), ...updates }); }
+function getConfig()        { return read(CONFIG_PATH); }
+function setConfig(updates) { write(CONFIG_PATH, { ...getConfig(), ...updates }); }
 
 // ─── DB helpers ───────────────────────────────────────────────────────────────
 
@@ -101,15 +107,10 @@ function removeFromBlacklist(guildId, userId) {
 }
 
 // ─── Staff server channel setup ───────────────────────────────────────────────
-// Creates a locked category + one channel per SERVER_CONFIG_MAP entry.
-// Skips channels that already exist.  Auto-links every matching guild the bot
-// is currently in by saving routeChannelId into their guild config.
-// Returns a summary string describing what was done.
 
 async function autoSetupStaffChannels(client, staffGuild) {
   const cfg = getConfig();
 
-  // 1. Create or reuse the Applications category
   let category = cfg.staffCategoryId
     ? staffGuild.channels.cache.get(cfg.staffCategoryId)
     : staffGuild.channels.cache.find(
@@ -128,27 +129,19 @@ async function autoSetupStaffChannels(client, staffGuild) {
 
   setConfig({ staffGuildId: staffGuild.id, staffCategoryId: category.id });
 
-  // 2. Create channels, one per config entry
   const lines = [];
 
   for (const entry of SERVER_CONFIG_MAP) {
-    // Does the channel already exist?
     let ch = staffGuild.channels.cache.find(
-      (c) =>
-        c.parentId === category.id &&
-        entry.channelNames.includes(c.name) &&
-        c.isTextBased()
+      (c) => c.parentId === category.id && entry.channelNames.includes(c.name) && c.isTextBased()
     );
 
     if (!ch) {
-      // Find the matching HR role in the staff server (if it exists) to grant access
       const hrRole = staffGuild.roles.cache.find((r) => r.name === entry.roleName);
       const overwrites = [
         { id: staffGuild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
       ];
-      if (hrRole) {
-        overwrites.push({ id: hrRole.id, allow: [PermissionsBitField.Flags.ViewChannel] });
-      }
+      if (hrRole) overwrites.push({ id: hrRole.id, allow: [PermissionsBitField.Flags.ViewChannel] });
 
       ch = await staffGuild.channels.create({
         name:                 entry.channelName,
@@ -162,7 +155,6 @@ async function autoSetupStaffChannels(client, staffGuild) {
       lines.push(`⏭️ Already exists <#${ch.id}>`);
     }
 
-    // 3. Auto-link every matching guild the bot is in
     for (const guild of client.guilds.cache.values()) {
       if (guild.id === staffGuild.id) continue;
       const gcfg = getServerConfig(guild.name);
@@ -176,7 +168,6 @@ async function autoSetupStaffChannels(client, staffGuild) {
   return lines.join("\n");
 }
 
-// Link a single newly-joined guild to its staff channel (if staff server is set up).
 async function autoLinkNewGuild(client, guild) {
   const cfg = getConfig();
   if (!cfg.staffGuildId) return;
@@ -193,7 +184,7 @@ async function autoLinkNewGuild(client, guild) {
   if (!ch) return;
 
   setGuildConfig(guild.id, { routeChannelId: ch.id });
-  console.log(`🔗 Auto-linked new guild [${guild.name}] → #${ch.name} in [${staffGuild.name}]`);
+  console.log(`🔗 Auto-linked [${guild.name}] → #${ch.name}`);
 }
 
 // ─── Role & channel resolution ────────────────────────────────────────────────
@@ -209,7 +200,6 @@ function resolveHRRole(sourceGuildName, destGuild, savedHrRoleId) {
 }
 
 async function resolveAppChannel(client, sourceGuild, guildConfig) {
-  // 1. Cross-server route set via /setroute or auto-setup
   if (guildConfig?.routeChannelId) {
     try {
       const ch = await client.channels.fetch(guildConfig.routeChannelId);
@@ -218,12 +208,10 @@ async function resolveAppChannel(client, sourceGuild, guildConfig) {
       console.warn(`[warn] Could not fetch routeChannelId ${guildConfig.routeChannelId}:`, e.message);
     }
   }
-  // 2. Same-server saved channel
   if (guildConfig?.applicationChannel) {
     const ch = sourceGuild.channels.cache.get(guildConfig.applicationChannel);
     if (ch) return { channel: ch, guild: sourceGuild };
   }
-  // 3. Auto-detect by name in same server
   const entry = getServerConfig(sourceGuild.name);
   if (entry) {
     for (const name of entry.channelNames) {
@@ -244,7 +232,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("panel")
-    .setDescription("(Admin) Post the application panel with an Apply button in a channel.")
+    .setDescription("(Admin) Post the application panel with HR / Mod / Partnership buttons.")
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
     .addChannelOption((o) =>
       o.setName("channel")
@@ -262,7 +250,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
     .addStringOption((o) =>
       o.setName("channel-id")
-        .setDescription("ID of the destination channel. Right-click the channel → Copy Channel ID.")
+        .setDescription("ID of the destination channel.")
         .setRequired(true)
     ),
 
@@ -271,14 +259,10 @@ const commands = [
     .setDescription("(Admin) Set a same-server fallback channel and/or HR role override.")
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
     .addChannelOption((o) =>
-      o.setName("channel")
-        .setDescription("The channel where application threads will be created.")
-        .setRequired(true)
+      o.setName("channel").setDescription("Channel for application threads.").setRequired(true)
     )
     .addRoleOption((o) =>
-      o.setName("role")
-        .setDescription("The HR role to ping.")
-        .setRequired(false)
+      o.setName("role").setDescription("HR role to ping.").setRequired(false)
     ),
 
   new SlashCommandBuilder()
@@ -338,16 +322,28 @@ function buildReviewRow(disabled = false) {
 function buildPanelRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("panel_apply")
-      .setLabel("Apply Now")
+      .setCustomId("panel_apply_hr")
+      .setLabel("HR")
       .setStyle(ButtonStyle.Primary)
-      .setEmoji("📋")
+      .setEmoji("👥"),
+    new ButtonBuilder()
+      .setCustomId("panel_apply_mod")
+      .setLabel("Mod")
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji("🔨"),
+    new ButtonBuilder()
+      .setCustomId("panel_apply_partnership")
+      .setLabel("Partnership Manager")
+      .setStyle(ButtonStyle.Success)
+      .setEmoji("🤝")
   );
 }
 
 // ─── Shared application flow ──────────────────────────────────────────────────
 
-async function runApplication(client, user, sourceGuild) {
+async function runApplication(client, user, sourceGuild, roleType) {
+  const meta        = ROLE_TYPES[roleType];
+  const questionSet = questions[roleType];
   const guildConfig = getGuild(sourceGuild.id);
 
   if (isBlacklisted(sourceGuild.id, user.id)) return { ok: false, reason: "blacklisted" };
@@ -360,7 +356,7 @@ async function runApplication(client, user, sourceGuild) {
   try {
     dmChannel = await user.createDM();
     await dmChannel.send(
-      `📋 **Welcome to the ${sourceGuild.name} staff application!**\n` +
+      `${meta.emoji} **${sourceGuild.name} — ${meta.label} Application**\n` +
       `Answer each question below. You have **2 minutes** per question.\n` +
       `Type your answer and press Enter to move on.`
     );
@@ -369,13 +365,13 @@ async function runApplication(client, user, sourceGuild) {
   }
 
   const answers = [];
-  for (let i = 0; i < questions.length; i++) {
-    await dmChannel.send(`**Question ${i + 1} of ${questions.length}**\n${questions[i]}`);
+  for (let i = 0; i < questionSet.length; i++) {
+    await dmChannel.send(`**Question ${i + 1} of ${questionSet.length}**\n${questionSet[i]}`);
     try {
       const collected = await dmChannel.awaitMessages({
         filter: (m) => m.author.id === user.id,
-        max: 1,
-        time: 120_000,
+        max:    1,
+        time:   120_000,
         errors: ["time"],
       });
       answers.push(collected.first().content);
@@ -389,23 +385,23 @@ async function runApplication(client, user, sourceGuild) {
 
   const crossServer = destGuild.id !== sourceGuild.id;
   const embed = new EmbedBuilder()
-    .setTitle(`📄 New Application${crossServer ? ` — ${sourceGuild.name}` : ""}`)
-    .setColor(0x5865f2)
+    .setTitle(`${meta.emoji} ${meta.label} Application${crossServer ? ` — ${sourceGuild.name}` : ""}`)
+    .setColor(meta.color)
     .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL() })
     .setTimestamp()
-    .setFooter({ text: `User ID: ${user.id} • From: ${sourceGuild.name}` });
+    .setFooter({ text: `User ID: ${user.id} • From: ${sourceGuild.name} • Type: ${roleType}` });
 
-  questions.forEach((q, i) => {
+  questionSet.forEach((q, i) => {
     embed.addFields({ name: q, value: answers[i] || "*No answer*", inline: false });
   });
 
   let thread;
   try {
     thread = await appChannel.threads.create({
-      name:      `app · ${user.username} (${sourceGuild.name})`,
+      name:      `[${meta.label}] ${user.username} (${sourceGuild.name})`,
       type:      ChannelType.PrivateThread,
       invitable: false,
-      reason:    `Application from ${user.tag} in ${sourceGuild.name}`,
+      reason:    `${meta.label} application from ${user.tag} in ${sourceGuild.name}`,
     });
   } catch (err) {
     console.error("Failed to create private thread:", err);
@@ -414,7 +410,7 @@ async function runApplication(client, user, sourceGuild) {
   }
 
   const hrRole   = resolveHRRole(sourceGuild.name, destGuild, guildConfig?.hrRole);
-  const pingLine = hrRole ? `<@&${hrRole.id}> — new application to review.\n` : "";
+  const pingLine = hrRole ? `<@&${hrRole.id}> — new **${meta.label}** application to review.\n` : "";
 
   await thread.send({
     content:    `${pingLine}**Applicant:** <@${user.id}>`,
@@ -422,7 +418,7 @@ async function runApplication(client, user, sourceGuild) {
     components: [buildReviewRow()],
   });
 
-  console.log(`📄 [${sourceGuild.name}] → #${appChannel.name} in [${destGuild.name}] | ${user.tag} → ${thread.id}`);
+  console.log(`📄 [${sourceGuild.name}] ${meta.label} → #${appChannel.name} in [${destGuild.name}] | ${user.tag}`);
   return { ok: true };
 }
 
@@ -449,7 +445,7 @@ client.once("ready", async () => {
     console.error("❌ Failed to register slash commands:", err);
   }
 
-  // If a staff server was previously configured, try to link any unlinked guilds
+  // Link any unlinked guilds if a staff server is already configured
   const cfg = getConfig();
   if (cfg.staffGuildId) {
     const staffGuild = client.guilds.cache.get(cfg.staffGuildId);
@@ -457,11 +453,9 @@ client.once("ready", async () => {
       for (const guild of client.guilds.cache.values()) {
         if (guild.id === staffGuild.id) continue;
         const guildCfg = getGuild(guild.id);
-        if (guildCfg?.routeChannelId) continue; // already linked
-
+        if (guildCfg?.routeChannelId) continue;
         const entry = getServerConfig(guild.name);
         if (!entry) continue;
-
         const ch = staffGuild.channels.cache.find(
           (c) => entry.channelNames.includes(c.name) && c.isTextBased()
         );
@@ -474,7 +468,6 @@ client.once("ready", async () => {
   }
 });
 
-// Auto-link new guilds when the bot joins them
 client.on("guildCreate", async (guild) => {
   console.log(`➕ Joined guild: ${guild.name}`);
   await autoLinkNewGuild(client, guild);
@@ -491,7 +484,6 @@ client.on("interactionCreate", async (interaction) => {
     // /setstaffserver
     if (commandName === "setstaffserver") {
       await interaction.deferReply({ ephemeral: true });
-
       let summary;
       try {
         summary = await autoSetupStaffChannels(client, guild);
@@ -499,7 +491,6 @@ client.on("interactionCreate", async (interaction) => {
         console.error("autoSetupStaffChannels error:", err);
         return interaction.editReply(`❌ Something went wrong: ${err.message}`);
       }
-
       const embed = new EmbedBuilder()
         .setTitle("✅ Staff Server Configured")
         .setDescription(
@@ -509,7 +500,6 @@ client.on("interactionCreate", async (interaction) => {
         )
         .setColor(0x57f287)
         .setTimestamp();
-
       return interaction.editReply({ embeds: [embed] });
     }
 
@@ -533,14 +523,14 @@ client.on("interactionCreate", async (interaction) => {
         .setTitle("📋 Apply Bot — Commands")
         .setColor(0x5865f2)
         .addFields(
-          { name: "`/setstaffserver`", value: "*(Admin, staff server)* Create all app channels and auto-link every server.", inline: false },
-          { name: "`/panel`",          value: "*(Admin)* Post the application panel in a channel.",                          inline: false },
-          { name: "`/apply`",          value: "Start a staff application via DM.",                                           inline: false },
-          { name: "`/setroute`",       value: "*(Admin)* Manually route apps to a specific channel ID.",                    inline: false },
-          { name: "`/setup`",          value: "*(Admin)* Set a same-server fallback channel + optional HR role.",            inline: false },
-          { name: "`/setrole`",        value: "*(Admin)* Override the HR role to ping.",                                    inline: false },
-          { name: "`/blacklist`",      value: "*(Mod)* Prevent a user from applying.",                                      inline: false },
-          { name: "`/unblacklist`",    value: "*(Admin)* Remove a user from the blacklist.",                                inline: false },
+          { name: "`/setstaffserver`", value: "*(Admin, staff server)* Create all app channels and link every server.", inline: false },
+          { name: "`/panel`",          value: "*(Admin)* Post the HR / Mod / Partnership panel.",                       inline: false },
+          { name: "`/apply`",          value: "Start an application via DM.",                                           inline: false },
+          { name: "`/setroute`",       value: "*(Admin)* Manually route apps to a specific channel ID.",               inline: false },
+          { name: "`/setup`",          value: "*(Admin)* Set a fallback channel + optional HR role.",                  inline: false },
+          { name: "`/setrole`",        value: "*(Admin)* Override the HR role to ping.",                               inline: false },
+          { name: "`/blacklist`",      value: "*(Mod)* Prevent a user from applying.",                                 inline: false },
+          { name: "`/unblacklist`",    value: "*(Admin)* Remove a user from the blacklist.",                           inline: false },
         )
         .addFields({
           name: "⚙️ This server's routing",
@@ -583,8 +573,10 @@ client.on("interactionCreate", async (interaction) => {
       const update  = { applicationChannel: channel.id };
       if (role) update.hrRole = role.id;
       setGuildConfig(guild.id, update);
-      const roleText = role ? ` HR role set to ${role}.` : "";
-      return interaction.reply({ content: `✅ Fallback channel set to ${channel}.${roleText}`, ephemeral: true });
+      return interaction.reply({
+        content: `✅ Fallback channel set to ${channel}.${role ? ` HR role set to ${role}.` : ""}`,
+        ephemeral: true,
+      });
     }
 
     // /setrole
@@ -620,12 +612,17 @@ client.on("interactionCreate", async (interaction) => {
         .setTitle("📋 Staff Applications")
         .setDescription(
           `Want to join the team at **${guild.name}**?\n\n` +
-          `Click the button below to start your application.\n` +
+          `Choose the role you'd like to apply for below.\n` +
           `The questions will be sent to your **DMs** — make sure they are open!\n\n` +
           `> ⏱️ You have **2 minutes** to answer each question.\n` +
           `> 📬 You'll be notified once a decision has been made.`
         )
         .setColor(0x5865f2)
+        .addFields(
+          { name: "👥 HR",                   value: "Help manage and recruit our staff team.",           inline: true },
+          { name: "🔨 Mod",                   value: "Keep the server safe and enforce the rules.",      inline: true },
+          { name: "🤝 Partnership Manager",   value: "Build relationships with other Discord servers.",  inline: true },
+        )
         .setTimestamp()
         .setFooter({ text: guild.name });
 
@@ -633,12 +630,11 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: `✅ Panel sent to ${target}.`, ephemeral: true });
     }
 
-    // /apply
+    // /apply (text command fallback — asks user to pick a role)
     if (commandName === "apply") {
       if (isBlacklisted(guild.id, user.id)) {
         return interaction.reply({ content: "🚫 You are blacklisted from submitting applications.", ephemeral: true });
       }
-
       const resolved = await resolveAppChannel(client, guild, getGuild(guild.id));
       if (!resolved) {
         return interaction.reply({
@@ -646,20 +642,16 @@ client.on("interactionCreate", async (interaction) => {
           ephemeral: true,
         });
       }
-
-      let dmChannel;
-      try {
-        dmChannel = await user.createDM();
-        await dmChannel.send(
-          `📋 **Welcome to the ${guild.name} staff application!**\n` +
-          `Answer each question below. You have **2 minutes** per question.`
-        );
-      } catch {
-        return interaction.reply({ content: "❌ I couldn't DM you. Please enable DMs from server members and try again.", ephemeral: true });
-      }
-
-      await interaction.reply({ content: "📬 Check your DMs — your application has started!", ephemeral: true });
-      await runApplication(client, user, guild);
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("apply_pick_hr").setLabel("HR").setStyle(ButtonStyle.Primary).setEmoji("👥"),
+        new ButtonBuilder().setCustomId("apply_pick_mod").setLabel("Mod").setStyle(ButtonStyle.Danger).setEmoji("🔨"),
+        new ButtonBuilder().setCustomId("apply_pick_partnership").setLabel("Partnership Manager").setStyle(ButtonStyle.Success).setEmoji("🤝")
+      );
+      return interaction.reply({
+        content: "Which role would you like to apply for?",
+        components: [row],
+        ephemeral: true,
+      });
     }
 
     return;
@@ -667,10 +659,21 @@ client.on("interactionCreate", async (interaction) => {
 
   // ── Button interactions ─────────────────────────────────────────────────────
   if (interaction.isButton()) {
+    const { guild, user } = interaction;
 
-    // ── Panel apply button ──
-    if (interaction.customId === "panel_apply") {
-      const { guild, user } = interaction;
+    // ── Panel apply buttons (3 role types) ──
+    const panelMap = {
+      panel_apply_hr:          "hr",
+      panel_apply_mod:         "mod",
+      panel_apply_partnership: "partnership",
+      apply_pick_hr:           "hr",
+      apply_pick_mod:          "mod",
+      apply_pick_partnership:  "partnership",
+    };
+
+    if (panelMap[interaction.customId]) {
+      const roleType = panelMap[interaction.customId];
+      const meta     = ROLE_TYPES[roleType];
 
       if (isBlacklisted(guild.id, user.id)) {
         return interaction.reply({ content: "🚫 You are blacklisted from submitting applications.", ephemeral: true });
@@ -684,9 +687,12 @@ client.on("interactionCreate", async (interaction) => {
         });
       }
 
-      await interaction.reply({ content: "📬 Check your DMs — your application has started!", ephemeral: true });
+      await interaction.reply({
+        content: `${meta.emoji} Check your DMs — your **${meta.label}** application has started!`,
+        ephemeral: true,
+      });
 
-      const result = await runApplication(client, user, guild);
+      const result = await runApplication(client, user, guild, roleType);
       if (!result.ok && result.reason === "no_dm") {
         await interaction.editReply({ content: "❌ I couldn't DM you. Please enable DMs from server members and try again." });
       }
@@ -699,23 +705,24 @@ client.on("interactionCreate", async (interaction) => {
       const isAdmin   = interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
       const footer          = interaction.message.embeds[0]?.footer?.text ?? "";
-      const fromMatch       = footer.match(/From:\s*(.+)$/);
+      const fromMatch       = footer.match(/From:\s*([^•]+)/);
       const sourceGuildName = fromMatch ? fromMatch[1].trim() : destGuild.name;
+      const typeMatch       = footer.match(/Type:\s*(\w+)/);
+      const roleType        = typeMatch ? typeMatch[1] : "hr";
+      const meta            = ROLE_TYPES[roleType] || ROLE_TYPES.hr;
 
       const guildConfig = getGuild(destGuild.id);
       const hrRole      = resolveHRRole(sourceGuildName, destGuild, guildConfig?.hrRole);
 
-      // If an HR role exists → must have it (admin alone is not enough).
-      // If no HR role is configured → fall back to admin-only access.
       const hasAccess = hrRole
         ? interaction.member.roles.cache.has(hrRole.id)
         : isAdmin;
 
       if (!hasAccess) {
-        const msg = hrRole
+        const errMsg = hrRole
           ? `❌ You need the <@&${hrRole.id}> role to manage applications.`
           : "❌ You don't have permission to manage applications.";
-        return interaction.reply({ content: msg, ephemeral: true });
+        return interaction.reply({ content: errMsg, ephemeral: true });
       }
 
       const msg            = interaction.message;
@@ -730,27 +737,49 @@ client.on("interactionCreate", async (interaction) => {
       try { applicantUser = await client.users.fetch(applicantId); } catch {}
 
       if (interaction.customId === "app_accept") {
-        const updated = EmbedBuilder.from(msg.embeds[0]).setColor(0x57f287).setTitle(`✅ Application Accepted — ${sourceGuildName}`);
+        const updated = EmbedBuilder.from(msg.embeds[0])
+          .setColor(0x57f287)
+          .setTitle(`✅ ${meta.label} Application Accepted — ${sourceGuildName}`);
         await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
-        await interaction.reply({ content: `✅ Application **accepted** by ${reviewer}.` });
-        try { await applicantUser?.send(`✅ **Your application has been accepted!** Congratulations! A staff member from **${sourceGuildName}** will reach out to you soon.`); } catch {}
+        await interaction.reply({ content: `✅ **${meta.label}** application **accepted** by ${reviewer}.` });
+        try {
+          await applicantUser?.send(
+            `✅ **Your ${meta.label} application has been accepted!** Congratulations! ` +
+            `A staff member from **${sourceGuildName}** will reach out to you soon.`
+          );
+        } catch {}
       }
 
       else if (interaction.customId === "app_deny") {
-        const updated = EmbedBuilder.from(msg.embeds[0]).setColor(0xed4245).setTitle(`❌ Application Denied — ${sourceGuildName}`);
+        const updated = EmbedBuilder.from(msg.embeds[0])
+          .setColor(0xed4245)
+          .setTitle(`❌ ${meta.label} Application Denied — ${sourceGuildName}`);
         await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
-        await interaction.reply({ content: `❌ Application **denied** by ${reviewer}.` });
-        try { await applicantUser?.send(`❌ **Your application has been denied.** Unfortunately your application to **${sourceGuildName}** was not accepted at this time. You're welcome to apply again in the future.`); } catch {}
+        await interaction.reply({ content: `❌ **${meta.label}** application **denied** by ${reviewer}.` });
+        try {
+          await applicantUser?.send(
+            `❌ **Your ${meta.label} application has been denied.** ` +
+            `Unfortunately your application to **${sourceGuildName}** was not accepted at this time. ` +
+            `You're welcome to apply again in the future.`
+          );
+        } catch {}
       }
 
       else if (interaction.customId === "app_blacklist") {
         const sourceGuild = client.guilds.cache.find((g) => g.name === sourceGuildName);
         if (sourceGuild) addToBlacklist(sourceGuild.id, applicantId);
 
-        const updated = EmbedBuilder.from(msg.embeds[0]).setColor(0x000000).setTitle(`🚫 Denied & Blacklisted — ${sourceGuildName}`);
+        const updated = EmbedBuilder.from(msg.embeds[0])
+          .setColor(0x000000)
+          .setTitle(`🚫 ${meta.label} Application Denied & Blacklisted — ${sourceGuildName}`);
         await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
-        await interaction.reply({ content: `🚫 Application **denied & user blacklisted** by ${reviewer}.` });
-        try { await applicantUser?.send(`🚫 **Your application has been denied** and you have been blacklisted from applying to **${sourceGuildName}** in the future.`); } catch {}
+        await interaction.reply({ content: `🚫 **${meta.label}** application **denied & user blacklisted** by ${reviewer}.` });
+        try {
+          await applicantUser?.send(
+            `🚫 **Your ${meta.label} application has been denied** and you have been blacklisted ` +
+            `from applying to **${sourceGuildName}** in the future.`
+          );
+        } catch {}
       }
     }
   }

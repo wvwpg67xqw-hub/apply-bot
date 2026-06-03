@@ -1,17 +1,38 @@
-[
-  "1. Discord username?",
-  "2. Age?",
-  "3. Timezone?",
-  "4. What position are you applying for?",
-  "5. Do you have staff experience?",
-  "6. Previous servers you worked in?",
-  "7. Why do you want staff here?",
-  "8. How many hours can you be active?",
-  "9. What would you do in a raid?",
-  "10. How do you handle toxic users?",
-  "11. What if another staff abuses power?",
-  "12. What are your strengths?",
-  "13. What are your weaknesses?",
-  "14. Do you have a microphone?",
-  "15. Why should we choose you?"
-]
+{
+  "hr": [
+    "What is your username and age?",
+    "What timezone are you in and how many hours per day can you dedicate to the server?",
+    "Do you have any previous HR or staff management experience? If yes, please describe it.",
+    "Why do you want to join the HR team of this server specifically?",
+    "How would you handle a staff member who is repeatedly failing to do their duties?",
+    "What would you do if two staff members came to you with a conflict between them?",
+    "How do you stay organised when managing multiple responsibilities at once?",
+    "Are you currently staff in any other Discord servers? If so, which ones and what is your role?",
+    "What does good HR management mean to you in a Discord community?",
+    "Is there anything else you'd like us to know about you?"
+  ],
+  "mod": [
+    "What is your username and age?",
+    "What timezone are you in and how many hours per day can you be active?",
+    "Do you have any previous moderation experience on Discord? If yes, describe it.",
+    "Why do you want to be a moderator in this server?",
+    "A member is spamming advertisements outside of the allowed channels. How do you handle it?",
+    "Someone is being verbally abusive toward other members in chat. What steps do you take?",
+    "How do you handle a situation where you are unsure whether something breaks the rules?",
+    "Are you familiar with Discord's Terms of Service and Community Guidelines?",
+    "Are you currently a moderator in any other servers? If so, which ones?",
+    "Is there anything else you'd like us to know about you?"
+  ],
+  "partnership": [
+    "What is your username and age?",
+    "What timezone are you in and how many hours per day can you dedicate to partnerships?",
+    "Do you have any previous experience managing server partnerships? If yes, describe it.",
+    "Why do you want to be a Partnership Manager for this server?",
+    "How would you approach reaching out to another server about a potential partnership?",
+    "What qualities or criteria do you look for in a server before partnering with them?",
+    "How would you handle a partner server that is breaking the terms of your partnership agreement?",
+    "How do you plan to keep track of active partners and follow up with them regularly?",
+    "Are you currently a partnership manager in any other servers? If so, which ones?",
+    "Is there anything else you'd like us to know about you?"
+  ]
+}
