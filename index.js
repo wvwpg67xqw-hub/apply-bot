@@ -612,42 +612,66 @@ client.on("interactionCreate", async (interaction) => {
 
     // /setacceptroles
     if (commandName === "setacceptroles") {
-      const hrRole          = interaction.options.getRole("hr-role");
-      const hrTeam          = interaction.options.getRole("hr-team");
-      const modRole         = interaction.options.getRole("mod-role");
-      const modTeam         = interaction.options.getRole("mod-team");
-      const partnerRole     = interaction.options.getRole("partnership-role");
-      const partnerTeam     = interaction.options.getRole("partnership-team");
+      try {
+        const hrRole          = interaction.options.getRole("hr-role");
+        const hrTeam          = interaction.options.getRole("hr-team");
+        const modRole         = interaction.options.getRole("mod-role");
+        const modTeam         = interaction.options.getRole("mod-team");
+        const partnerRole     = interaction.options.getRole("partnership-role");
+        const partnerTeam     = interaction.options.getRole("partnership-team");
 
-      setGuildConfig(guild.id, {
-        hrRoleId:           hrRole.id,
-        hrTeamRoleId:       hrTeam.id,
-        modRoleId:          modRole.id,
-        modTeamRoleId:      modTeam.id,
-        partnershipRoleId:  partnerRole.id,
-        partnershipTeamRoleId: partnerTeam.id,
-      });
+        const missing = [
+          !hrRole      && "hr-role",
+          !hrTeam      && "hr-team",
+          !modRole     && "mod-role",
+          !modTeam     && "mod-team",
+          !partnerRole && "partnership-role",
+          !partnerTeam && "partnership-team",
+        ].filter(Boolean);
 
-      return interaction.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle(`✅ Accept roles configured for ${guild.name}`)
-            .setColor(0x57f287)
-            .addFields(
-              { name: "👥 HR Role",                   value: `${hrRole}`,      inline: true },
-              { name: "👥 HR Team Role",               value: `${hrTeam}`,      inline: true },
-              { name: "\u200b",                        value: "\u200b",          inline: true },
-              { name: "🔨 Mod Role",                   value: `${modRole}`,     inline: true },
-              { name: "🔨 Mod Team Role",               value: `${modTeam}`,     inline: true },
-              { name: "\u200b",                        value: "\u200b",          inline: true },
-              { name: "🤝 Partnership Manager Role",   value: `${partnerRole}`, inline: true },
-              { name: "🤝 Partnership Team Role",      value: `${partnerTeam}`, inline: true },
-              { name: "\u200b",                        value: "\u200b",          inline: true },
-            )
-            .setFooter({ text: "These roles will be granted when an application is accepted." }),
-        ],
-        ephemeral: true,
-      });
+        if (missing.length) {
+          return interaction.reply({
+            content: `❌ Could not resolve the following roles: **${missing.join(", ")}**. Make sure the roles exist in this server and try again.`,
+            ephemeral: true,
+          });
+        }
+
+        setGuildConfig(guild.id, {
+          hrRoleId:              hrRole.id,
+          hrTeamRoleId:          hrTeam.id,
+          modRoleId:             modRole.id,
+          modTeamRoleId:         modTeam.id,
+          partnershipRoleId:     partnerRole.id,
+          partnershipTeamRoleId: partnerTeam.id,
+        });
+
+        return interaction.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(`✅ Accept roles configured for ${guild.name}`)
+              .setColor(0x57f287)
+              .addFields(
+                { name: "👥 HR Role",                  value: `${hrRole}`,      inline: true },
+                { name: "👥 HR Team Role",              value: `${hrTeam}`,      inline: true },
+                { name: "\u200b",                       value: "\u200b",          inline: true },
+                { name: "🔨 Mod Role",                  value: `${modRole}`,     inline: true },
+                { name: "🔨 Mod Team Role",              value: `${modTeam}`,     inline: true },
+                { name: "\u200b",                       value: "\u200b",          inline: true },
+                { name: "🤝 Partnership Manager Role",  value: `${partnerRole}`, inline: true },
+                { name: "🤝 Partnership Team Role",     value: `${partnerTeam}`, inline: true },
+                { name: "\u200b",                       value: "\u200b",          inline: true },
+              )
+              .setFooter({ text: "These roles will be granted when an application is accepted." }),
+          ],
+          ephemeral: true,
+        });
+      } catch (err) {
+        console.error("[setacceptroles] Error:", err);
+        return interaction.reply({
+          content: `❌ Something went wrong while saving roles: ${err.message}`,
+          ephemeral: true,
+        });
+      }
     }
 
     // /blacklist
