@@ -122,8 +122,12 @@ function isBlacklisted(guildId, userId) {
 
 function addToBlacklist(guildId, userId) {
   const guilds = getGuilds();
-  const idx    = guilds.findIndex((g) => g.id === guildId);
-  if (idx === -1) return;
+  let idx      = guilds.findIndex((g) => g.id === guildId);
+  if (idx === -1) {
+    guilds.push({ id: guildId, blacklist: [userId] });
+    write(GUILDS_PATH, guilds);
+    return;
+  }
   if (!Array.isArray(guilds[idx].blacklist)) guilds[idx].blacklist = [];
   if (!guilds[idx].blacklist.includes(userId)) guilds[idx].blacklist.push(userId);
   write(GUILDS_PATH, guilds);
