@@ -12,6 +12,7 @@ const {
   SlashCommandBuilder,
 } = require("discord.js");
 const { read, write } = require("./utils/jsondb");
+const { startCLI }   = require("./utils/cli");
 const questions = require("./questions.json");
 const log = require("./utils/logger");
 
@@ -617,6 +618,8 @@ client.once("ready", async () => {
       }
     }
   }
+
+  startCLI(client, { addToBlacklist, removeFromBlacklist, isBlacklisted, parseDuration });
 });
 
 client.on("guildCreate", async (guild) => {
