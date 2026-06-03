@@ -156,7 +156,9 @@ function removeFromBlacklist(guildId, userId) {
   const idx    = guilds.findIndex((g) => g.id === guildId);
   if (idx === -1) return false;
   const before = guilds[idx].blacklist?.length || 0;
-  guilds[idx].blacklist = (guilds[idx].blacklist || []).filter((id) => id !== userId);
+  guilds[idx].blacklist = (guilds[idx].blacklist || []).filter(
+    (e) => (typeof e === "string" ? e : e.userId) !== userId
+  );
   write(GUILDS_PATH, guilds);
   return guilds[idx].blacklist.length < before;
 }
