@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bot Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-primary:    #313338;
+    --bg-secondary:  #2b2d31;
+    --bg-tertiary:   #1e1f22;
+    --bg-accent:     #404249;
+    --bg-hover:      #35373c;
+    --bg-selected:   #404249;
+    --text-primary:  #dbdee1;
+    --text-muted:    #80848e;
+    --text-link:     #00a8fc;
+    --brand:         #5865f2;
+    --green:         #23a559;
+    --red:           #f23f43;
+    --gold:          #f0b232;
+    --border:        #3f4147;
+    --scrollbar:     #1a1b1e;
+    --input-bg:      #383a40;
+    --mention-bg:    rgba(88,101,242,.15);
+  }
+
+  html, body { height: 100%; overflow: hidden; font-family: "gg sans", "Noto Sans", Whitney, "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  body { display: flex; background: var(--bg-primary); color: var(--text-primary); font-size: 14px; }
+
+  /* ── Scrollbars ── */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 4px; }
+
+  /* ── Server list ── */
+  #servers {
+    width: 72px; min-width: 72px;
+    background: var(--bg-tertiary);
+    display: flex; flex-direction: column; align-items: center;
+    gap: 8px; padding: 12px 0; overflow-y: auto;
+  }
+  .server-icon {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--bg-accent); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 18px; color: var(--text-primary);
+    transition: border-radius .15s, background .15s;
+    overflow: hidden; position: relative; flex-shrink: 0;
+  }
+  .server-icon img { width: 100%; height: 100%; object-fit: cover; }
+  .server-icon:hover, .server-icon.active { border-radius: 30%; background: var(--brand); }
+  .server-pill {
+    position: absolute; left: -4px; top: 50%; transform: translateY(-50%);
+    width: 8px; height: 0; border-radius: 0 4px 4px 0;
+    background: white; transition: height .15s;
+    pointer-events: none;
+  }
+  .server-icon:hover  .server-pill { height: 20px; }
+  .server-icon.active .server-pill { height: 40px; }
+  .server-divider { width: 32px; height: 2px; background: var(--border); border-radius: 1px; flex-shrink: 0; }
+
+  /* ── Channel sidebar ── */
+  #channels {
+    width: 240px; min-width: 240px;
+    background: var(--bg-secondary);
+    display: flex; flex-direction: column;
+  }
+  #guild-header {
+    padding: 16px;
+    font-weight: 700; font-size: 15px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+    cursor: default; user-select: none;
+  }
+  #channel-list { flex: 1; overflow-y: auto; padding: 8px 0; }
+  .channel-category {
+    padding: 16px 8px 4px 8px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--text-muted); cursor: default;
+  }
+  .channel-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 8px; margin: 1px 8px; border-radius: 4px;
+    cursor: pointer; color: var(--text-muted);
+    transition: background .1s, color .1s;
+  }
+  .channel-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .channel-item.active { background: var(--bg-selected); color: var(--text-primary); }
+  .channel-hash { font-size: 18px; line-height: 1; flex-shrink: 0; }
+
+  /* ── Bot info at bottom of sidebar ── */
+  #bot-info {
+    padding: 8px 12px; background: var(--bg-tertiary);
+    display: flex; align-items: center; gap: 8px;
+    border-top: 1px solid var(--border);
+  }
+  #bot-info img { width: 32px; height: 32px; border-radius: 50%; }
+  #bot-info .name { font-weight: 600; font-size: 13px; }
+  #bot-info .sub  { font-size: 11px; color: var(--green); }
+
+  /* ── Main area ── */
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  /* Channel header */
+  #channel-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 8px;
+    font-weight: 600; font-size: 15px; flex-shrink: 0;
+  }
+  #channel-header .hash { font-size: 20px; color: var(--text-muted); }
+  #channel-header .name { color: var(--text-primary); }
+
+  /* Messages */
+  #messages {
+    flex: 1; overflow-y: auto;
+    padding: 16px; display: flex; flex-direction: column; gap: 2px;
+  }
+  .msg-group { display: flex; gap: 12px; padding: 4px 0; margin-top: 12px; }
+  .msg-group:first-child { margin-top: 0; }
+  .msg-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    flex-shrink: 0; cursor: pointer;
+    background: var(--bg-accent);
+  }
+  .msg-content { flex: 1; min-width: 0; }
+  .msg-header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+  .msg-author { font-weight: 600; font-size: 14px; cursor: pointer; }
+  .msg-author:hover { text-decoration: underline; }
+  .msg-author.bot-tag { color: var(--brand); }
+  .bot-badge {
+    font-size: 9px; font-weight: 700; background: var(--brand);
+    color: white; padding: 1px 4px; border-radius: 3px;
+    text-transform: uppercase; letter-spacing: .03em;
+  }
+  .msg-time { font-size: 11px; color: var(--text-muted); }
+  .msg-body { color: var(--text-primary); line-height: 1.375; word-break: break-word; white-space: pre-wrap; }
+  .msg-body.embed-hint { color: var(--text-muted); font-style: italic; font-size: 12px; margin-top: 2px; }
+  .msg-continuation { margin-left: 52px; padding: 1px 0; }
+  .msg-continuation .msg-body { font-size: 14px; }
+  .msg-hover-actions {
+    display: none; gap: 4px; position: absolute; right: 16px; top: -14px;
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 4px;
+  }
+  .msg-wrap { position: relative; }
+  .msg-wrap:hover .msg-hover-actions { display: flex; }
+  .hover-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); font-size: 13px; padding: 2px 6px;
+    border-radius: 3px;
+  }
+  .hover-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  /* Placeholder */
+  #empty-state {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--text-muted); gap: 12px;
+  }
+  #empty-state .icon { font-size: 64px; }
+  #empty-state p { font-size: 16px; }
+
+  /* Input area */
+  #input-area {
+    padding: 0 16px 16px;
+    flex-shrink: 0;
+  }
+  #reply-bar {
+    display: none; align-items: center; gap: 8px;
+    background: var(--bg-accent); border-radius: 4px 4px 0 0;
+    padding: 6px 12px; font-size: 12px; color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+  }
+  #reply-bar span { flex: 1; }
+  #reply-cancel {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); font-size: 16px; line-height: 1;
+  }
+  #reply-cancel:hover { color: var(--text-primary); }
+  #message-form { display: flex; gap: 0; }
+  #message-input {
+    flex: 1; background: var(--input-bg);
+    border: none; border-radius: 8px; padding: 11px 16px;
+    color: var(--text-primary); font-size: 14px; resize: none;
+    outline: none; font-family: inherit; line-height: 1.4;
+    min-height: 44px; max-height: 200px;
+    border-top-right-radius: 0; border-bottom-right-radius: 0;
+  }
+  #message-input::placeholder { color: var(--text-muted); }
+  #send-btn {
+    background: var(--brand); border: none; cursor: pointer;
+    color: white; padding: 0 16px; border-radius: 0 8px 8px 0;
+    font-size: 18px; transition: background .1s;
+  }
+  #send-btn:hover { background: #4752c4; }
+  #send-btn:disabled { background: var(--bg-accent); cursor: not-allowed; color: var(--text-muted); }
+
+  /* DM modal */
+  .modal-bg {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.6); z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--bg-secondary); border-radius: 8px;
+    padding: 24px; width: 420px; max-width: 90vw;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .modal h2 { font-size: 18px; font-weight: 700; }
+  .modal input, .modal textarea {
+    background: var(--bg-tertiary); border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px 12px; color: var(--text-primary);
+    font-size: 14px; font-family: inherit; outline: none; width: 100%;
+  }
+  .modal input:focus, .modal textarea:focus { border-color: var(--brand); }
+  .modal textarea { resize: vertical; min-height: 80px; }
+  .modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  .btn { padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; }
+  .btn-primary { background: var(--brand); color: white; }
+  .btn-primary:hover { background: #4752c4; }
+  .btn-ghost { background: none; color: var(--text-muted); }
+  .btn-ghost:hover { color: var(--text-primary); }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--bg-tertiary); color: var(--text-primary);
+    padding: 10px 20px; border-radius: 6px; font-size: 13px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.4);
+    opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 200;
+  }
+  #toast.show { opacity: 1; }
+
+  .loading { color: var(--text-muted); padding: 16px; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- Server list -->
+<div id="servers"></div>
+
+<!-- Channel sidebar -->
+<div id="channels">
+  <div id="guild-header">Select a server</div>
+  <div id="channel-list"><p class="loading">←  Pick a server</p></div>
+  <div id="bot-info">
+    <img id="bot-avatar" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="">
+    <div>
+      <div class="name" id="bot-tag">Loading…</div>
+      <div class="sub" id="bot-status">● Online</div>
+    </div>
+  </div>
+</div>
+
+<!-- Main area -->
+<div id="main">
+  <div id="channel-header">
+    <span class="hash">#</span>
+    <span class="name" id="header-name">—</span>
+    <span style="flex:1"></span>
+    <button class="btn btn-primary" id="dm-open-btn" style="font-size:12px;padding:6px 12px;">✉ DM User</button>
+  </div>
+
+  <div id="messages">
+    <div id="empty-state">
+      <div class="icon">💬</div>
+      <p>Select a server and channel to view messages</p>
+    </div>
+  </div>
+
+  <div id="input-area">
+    <div id="reply-bar">
+      <span id="reply-label">Replying to …</span>
+      <button id="reply-cancel">✕</button>
+    </div>
+    <div id="message-form">
+      <textarea id="message-input" placeholder="Select a channel first…" disabled rows="1"></textarea>
+      <button id="send-btn" disabled>➤</button>
+    </div>
+  </div>
+</div>
+
+<!-- DM modal -->
+<div class="modal-bg" id="dm-modal">
+  <div class="modal">
+    <h2>✉ Send a DM</h2>
+    <input type="text" id="dm-userid" placeholder="User ID">
+    <textarea id="dm-content" placeholder="Message…"></textarea>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" id="dm-cancel">Cancel</button>
+      <button class="btn btn-primary" id="dm-send">Send</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let currentGuildId   = null;
+let currentChannelId = null;
+let replyToId        = null;
+let lastAuthorId     = null;
+let lastTimestamp    = 0;
+const GROUP_THRESHOLD = 7 * 60 * 1000; // 7 min
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function toast(msg, ms = 2500) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  setTimeout(() => el.classList.remove("show"), ms);
+}
+
+async function api(method, path, body) {
+  const r = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body:    body ? JSON.stringify(body) : undefined,
+  });
+  return r.json();
+}
+
+function fmtTime(ts) {
+  const d = new Date(ts);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+// ── Bot info ─────────────────────────────────────────────────────────────────
+async function loadBotInfo() {
+  const me = await api("GET", "/api/me");
+  if (me.tag) {
+    $("bot-tag").textContent    = me.tag;
+    $("bot-avatar").src         = me.avatar;
+    $("bot-avatar").alt         = me.tag;
+  }
+}
+
+// ── Servers ───────────────────────────────────────────────────────────────────
+async function loadServers() {
+  const guilds = await api("GET", "/api/guilds");
+  const list   = $("servers");
+  list.innerHTML = "";
+
+  for (const g of guilds) {
+    const el = document.createElement("div");
+    el.className = "server-icon";
+    el.title     = g.name;
+    el.dataset.id = g.id;
+
+    const pill = document.createElement("div");
+    pill.className = "server-pill";
+    el.appendChild(pill);
+
+    if (g.icon) {
+      const img = document.createElement("img");
+      img.src = g.icon; img.alt = g.name;
+      el.appendChild(img);
+    } else {
+      el.appendChild(document.createTextNode(g.name.split(" ").map(w=>w[0]).join("").slice(0,3)));
+    }
+
+    el.addEventListener("click", () => selectGuild(g.id, g.name));
+    list.appendChild(el);
+  }
+}
+
+async function selectGuild(id, name) {
+  currentGuildId   = id;
+  currentChannelId = null;
+  replyToId        = null;
+
+  document.querySelectorAll(".server-icon").forEach(el => el.classList.toggle("active", el.dataset.id === id));
+  $("guild-header").textContent = name;
+  $("channel-list").innerHTML   = '<p class="loading">Loading channels…</p>';
+  $("messages").innerHTML       = '<div id="empty-state"><div class="icon">💬</div><p>Pick a channel</p></div>';
+  $("header-name").textContent  = "—";
+  $("message-input").disabled   = true;
+  $("message-input").placeholder = "Select a channel first…";
+  $("send-btn").disabled        = true;
+
+  const channels = await api("GET", `/api/guilds/${id}/channels`);
+  renderChannels(channels);
+}
+
+function renderChannels(channels) {
+  const list = $("channel-list");
+  list.innerHTML = "";
+
+  const byParent = {};
+  for (const c of channels) {
+    const key = c.parentName ?? "__none";
+    if (!byParent[key]) byParent[key] = [];
+    byParent[key].push(c);
+  }
+
+  for (const [cat, items] of Object.entries(byParent)) {
+    if (cat !== "__none") {
+      const h = document.createElement("div");
+      h.className = "channel-category";
+      h.textContent = cat;
+      list.appendChild(h);
+    }
+    for (const ch of items) {
+      const el = document.createElement("div");
+      el.className   = "channel-item";
+      el.dataset.id  = ch.id;
+      el.innerHTML   = `<span class="channel-hash">#</span><span>${escHtml(ch.name)}</span>`;
+      el.addEventListener("click", () => selectChannel(ch.id, ch.name));
+      list.appendChild(el);
+    }
+  }
+}
+
+// ── Messages ──────────────────────────────────────────────────────────────────
+async function selectChannel(id, name) {
+  currentChannelId = id;
+  replyToId        = null;
+  $("reply-bar").style.display = "none";
+  lastAuthorId     = null;
+  lastTimestamp    = 0;
+
+  document.querySelectorAll(".channel-item").forEach(el => el.classList.toggle("active", el.dataset.id === id));
+  $("header-name").textContent    = name;
+  $("message-input").placeholder  = `Message #${name}`;
+  $("message-input").disabled     = false;
+  $("send-btn").disabled          = false;
+  $("messages").innerHTML         = '<p class="loading">Loading messages…</p>';
+
+  const msgs = await api("GET", `/api/channels/${id}/messages?limit=50`);
+  $("messages").innerHTML = "";
+  for (const m of msgs) appendMessage(m);
+  $("messages").scrollTop = $("messages").scrollHeight;
+}
+
+function appendMessage(m, scroll = false) {
+  const container = $("messages");
+  const sameAuthor = m.authorId === lastAuthorId && (m.timestamp - lastTimestamp) < GROUP_THRESHOLD;
+  lastAuthorId  = m.authorId;
+  lastTimestamp = m.timestamp;
+
+  const wrap = document.createElement("div");
+  wrap.className    = "msg-wrap";
+  wrap.dataset.msgId = m.id;
+
+  if (sameAuthor) {
+    wrap.classList.add("msg-continuation");
+    const body = document.createElement("div");
+    body.className = "msg-body";
+    body.textContent = m.content;
+    wrap.appendChild(body);
+    if (m.embeds > 0) {
+      const hint = document.createElement("div");
+      hint.className   = "msg-body embed-hint";
+      hint.textContent = `[${m.embeds} embed${m.embeds>1?"s":""}]`;
+      wrap.appendChild(hint);
+    }
+  } else {
+    wrap.classList.add("msg-group");
+    const avatar = document.createElement("img");
+    avatar.className = "msg-avatar";
+    avatar.src       = m.avatar;
+    avatar.alt       = m.author;
+    wrap.appendChild(avatar);
+
+    const content = document.createElement("div");
+    content.className = "msg-content";
+
+    const header = document.createElement("div");
+    header.className = "msg-header";
+
+    const author = document.createElement("span");
+    author.className = "msg-author" + (m.bot ? " bot-tag" : "");
+    author.textContent = m.author.replace(/#\d{4}$/, "");
+    header.appendChild(author);
+    if (m.bot) {
+      const badge = document.createElement("span");
+      badge.className   = "bot-badge";
+      badge.textContent = "APP";
+      header.appendChild(badge);
+    }
+    const time = document.createElement("span");
+    time.className   = "msg-time";
+    time.textContent = fmtTime(m.timestamp);
+    header.appendChild(time);
+    content.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className   = "msg-body";
+    body.textContent = m.content;
+    content.appendChild(body);
+
+    if (m.embeds > 0) {
+      const hint = document.createElement("div");
+      hint.className   = "msg-body embed-hint";
+      hint.textContent = `[${m.embeds} embed${m.embeds>1?"s":""}]`;
+      content.appendChild(hint);
+    }
+
+    wrap.appendChild(content);
+  }
+
+  // Hover reply button
+  const actions = document.createElement("div");
+  actions.className = "msg-hover-actions";
+  const replyBtn = document.createElement("button");
+  replyBtn.className   = "hover-btn";
+  replyBtn.title       = "Reply";
+  replyBtn.textContent = "↩ Reply";
+  replyBtn.addEventListener("click", () => startReply(m));
+  actions.appendChild(replyBtn);
+  wrap.appendChild(actions);
+
+  container.appendChild(wrap);
+  if (scroll) container.scrollTop = container.scrollHeight;
+}
+
+function startReply(m) {
+  replyToId = m.id;
+  $("reply-label").textContent    = `Replying to ${m.author.replace(/#\d{4}$/, "")}`;
+  $("reply-bar").style.display    = "flex";
+  $("message-input").focus();
+}
+
+$("reply-cancel").addEventListener("click", () => {
+  replyToId = null;
+  $("reply-bar").style.display = "none";
+});
+
+// ── Send message ───────────────────────────────────────────────────────────────
+async function sendMessage() {
+  const input = $("message-input");
+  const text  = input.value.trim();
+  if (!text || !currentChannelId) return;
+
+  input.value    = "";
+  input.style.height = "";
+  $("send-btn").disabled = true;
+
+  const body = { content: text };
+  if (replyToId) body.replyTo = replyToId;
+
+  const res = await api("POST", `/api/channels/${currentChannelId}/messages`, body);
+  if (res.error) toast("❌ " + res.error);
+  else {
+    replyToId = null;
+    $("reply-bar").style.display = "none";
+  }
+  $("send-btn").disabled = false;
+  input.focus();
+}
+
+$("send-btn").addEventListener("click", sendMessage);
+$("message-input").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+$("message-input").addEventListener("input", function() {
+  this.style.height = "";
+  this.style.height = Math.min(this.scrollHeight, 200) + "px";
+});
+
+// ── DM modal ──────────────────────────────────────────────────────────────────
+$("dm-open-btn").addEventListener("click", () => $("dm-modal").classList.add("open"));
+$("dm-cancel").addEventListener("click",   () => $("dm-modal").classList.remove("open"));
+$("dm-modal").addEventListener("click", e => { if (e.target === $("dm-modal")) $("dm-modal").classList.remove("open"); });
+
+$("dm-send").addEventListener("click", async () => {
+  const userId  = $("dm-userid").value.trim();
+  const content = $("dm-content").value.trim();
+  if (!userId || !content) { toast("Fill in both fields."); return; }
+  const res = await api("POST", `/api/dm/${userId}`, { content });
+  if (res.error) toast("❌ " + res.error);
+  else {
+    toast("✅ DM sent!");
+    $("dm-modal").classList.remove("open");
+    $("dm-userid").value  = "";
+    $("dm-content").value = "";
+  }
+});
+
+// ── SSE: live messages ─────────────────────────────────────────────────────────
+const evtSource = new EventSource("/events");
+evtSource.addEventListener("message", e => {
+  const m = JSON.parse(e.data);
+  if (m.channelId !== currentChannelId) return;
+  appendMessage(m, true);
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+(async () => {
+  await loadBotInfo();
+  await loadServers();
+})();
+</script>
+</body>
+</html>

@@ -11,8 +11,9 @@ const {
   Routes,
   SlashCommandBuilder,
 } = require("discord.js");
-const { read, write } = require("./utils/jsondb");
-const { startCLI }   = require("./utils/cli");
+const { read, write }      = require("./utils/jsondb");
+const { startCLI }         = require("./utils/cli");
+const { startWebServer }   = require("./server/web");
 const questions = require("./questions.json");
 const log = require("./utils/logger");
 
@@ -597,6 +598,7 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.MessageContent,
   ],
 });
 
@@ -636,6 +638,9 @@ client.once("ready", async () => {
   }
 
   startCLI(client, { addToBlacklist, removeFromBlacklist, isBlacklisted, parseDuration });
+
+  const webPort = parseInt(process.env.PORT ?? "3000", 10);
+  startWebServer(client, webPort);
 });
 
 client.on("guildCreate", async (guild) => {

@@ -28,3 +28,8 @@ outputType = "console"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm start"
+waitForPort = 3000
+
+[[ports]]
+localPort = 3000
+externalPort = 3000
