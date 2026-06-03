@@ -32,17 +32,38 @@ function startWebServer(client, port) {
     for (const res of sseClients) res.write(payload);
   }
 
+  function avatarURL(user) {
+    return user.displayAvatarURL({ size: 128, forceStatic: true });
+  }
+
   function msgPayload(msg) {
     return {
-      id:        msg.id,
-      channelId: msg.channelId,
-      content:   msg.content,
-      author:    msg.author.tag,
-      authorId:  msg.author.id,
-      avatar:    msg.author.displayAvatarURL({ size: 64, extension: "png", forceStatic: false }),
-      bot:       msg.author.bot,
-      timestamp: msg.createdTimestamp,
-      embeds:    msg.embeds.length,
+      id:          msg.id,
+      channelId:   msg.channelId,
+      content:     msg.content,
+      author:      msg.author.tag,
+      authorId:    msg.author.id,
+      avatar:      avatarURL(msg.author),
+      bot:         msg.author.bot,
+      timestamp:   msg.createdTimestamp,
+      attachments: msg.attachments.map(a => ({
+        url:         a.url,
+        proxyUrl:    a.proxyURL,
+        name:        a.name,
+        contentType: a.contentType ?? "",
+        width:       a.width  ?? 0,
+        height:      a.height ?? 0,
+      })),
+      embeds: msg.embeds.map(e => ({
+        title:       e.title       ?? null,
+        description: e.description ?? null,
+        color:       e.color       ?? null,
+        url:         e.url         ?? null,
+        image:       e.image?.url  ?? null,
+        thumbnail:   e.thumbnail?.url ?? null,
+        author:      e.author?.name ?? null,
+        footer:      e.footer?.text ?? null,
+      })),
     };
   }
 
@@ -66,7 +87,7 @@ function startWebServer(client, port) {
     res.json({
       tag:    client.user.tag,
       id:     client.user.id,
-      avatar: client.user.displayAvatarURL({ size: 64 }),
+      avatar: client.user.displayAvatarURL({ size: 128, forceStatic: true }),
     });
   });
 
@@ -75,7 +96,7 @@ function startWebServer(client, port) {
     const list = [...client.guilds.cache.values()].map((g) => ({
       id:          g.id,
       name:        g.name,
-      icon:        g.iconURL({ size: 64 }) ?? null,
+      icon:        g.iconURL({ size: 128, forceStatic: true }) ?? null,
       memberCount: g.memberCount,
     }));
     res.json(list);
@@ -106,16 +127,7 @@ function startWebServer(client, port) {
 
       const limit = Math.min(parseInt(req.query.limit ?? "50", 10), 100);
       const msgs  = await ch.messages.fetch({ limit });
-      const list  = [...msgs.values()].reverse().map((m) => ({
-        id:        m.id,
-        content:   m.content,
-        author:    m.author.tag,
-        authorId:  m.author.id,
-        avatar:    m.author.displayAvatarURL({ size: 32 }),
-        bot:       m.author.bot,
-        timestamp: m.createdTimestamp,
-        embeds:    m.embeds.length,
-      }));
+      const list  = [...msgs.values()].reverse().map((m) => msgPayload(m));
       res.json(list);
     } catch (err) {
       res.status(500).json({ error: err.message });
