@@ -16,23 +16,74 @@ const questions = require("./questions.json");
 
 const GUILDS_PATH = "./data/guilds.json";
 
-// ─── Server → HR role name map ────────────────────────────────────────────────
-const SERVER_ROLE_MAP = [
-  { match: "plain promotions",    role: "Plain Promotions Apps"    },
-  { match: "advertising legends", role: "Advertising Legends Apps" },
-  { match: "devil advertising",   role: "Devil Advertising Apps"   },
-  { match: "prime promotions",    role: "Prime Promotions Apps"    },
-  { match: "shadow advertising",  role: "Shadow Advertising Apps"  },
+// ─── Per-server config map ────────────────────────────────────────────────────
+// The bot matches the guild name (case-insensitive) against `match`, then
+// auto-finds the HR role by `roleName` and the application channel by any name
+// in `channelNames`.  Update `channelNames` if your channel is named differently.
+// `/setup` always overrides auto-detection for both role and channel.
+const SERVER_CONFIG_MAP = [
+  {
+    match:        "plain promotions",
+    roleName:     "Plain Promotions Apps",
+    channelNames: ["plain-promotions-apps", "pp-apps", "applications", "staff-apps"],
+  },
+  {
+    match:        "advertising legends",
+    roleName:     "Advertising Legends Apps",
+    channelNames: ["advertising-legends-apps", "al-apps", "applications", "staff-apps"],
+  },
+  {
+    match:        "devil advertising",
+    roleName:     "Devil Advertising Apps",
+    channelNames: ["devil-advertising-apps", "da-apps", "applications", "staff-apps"],
+  },
+  {
+    match:        "prime promotions",
+    roleName:     "Prime Promotions Apps",
+    channelNames: ["prime-promotions-apps", "pp-apps", "applications", "staff-apps"],
+  },
+  {
+    match:        "shadow advertising",
+    roleName:     "Shadow Advertising Apps",
+    channelNames: ["shadow-advertising-apps", "sa-apps", "applications", "staff-apps"],
+  },
 ];
 
-function resolveHRRole(guild, savedHrRoleId) {
+// Find the config entry for a guild, or null.
+function getServerConfig(guild) {
   const lower = guild.name.toLowerCase();
-  const entry = SERVER_ROLE_MAP.find((e) => lower.includes(e.match));
+  return SERVER_CONFIG_MAP.find((e) => lower.includes(e.match)) || null;
+}
+
+// Resolve the HR role: auto-detected by server name first, then saved override.
+function resolveHRRole(guild, savedHrRoleId) {
+  const entry = getServerConfig(guild);
   if (entry) {
-    const role = guild.roles.cache.find((r) => r.name === entry.role);
+    const role = guild.roles.cache.find((r) => r.name === entry.roleName);
     if (role) return role;
   }
   if (savedHrRoleId) return guild.roles.cache.get(savedHrRoleId) || null;
+  return null;
+}
+
+// Resolve the application channel:
+//   1. Saved channel ID from /setup  (highest priority)
+//   2. Auto-detected by name from SERVER_CONFIG_MAP
+// Returns a Channel object or null.
+function resolveAppChannel(guild, savedChannelId) {
+  if (savedChannelId) {
+    const ch = guild.channels.cache.get(savedChannelId);
+    if (ch) return ch;
+  }
+  const entry = getServerConfig(guild);
+  if (entry) {
+    for (const name of entry.channelNames) {
+      const ch = guild.channels.cache.find(
+        (c) => c.name === name && c.isTextBased()
+      );
+      if (ch) return ch;
+    }
+  }
   return null;
 }
 
@@ -91,7 +142,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("setup")
-    .setDescription("(Admin) Set the channel for application threads and optionally the HR role.")
+    .setDescription("(Admin) Override the auto-detected application channel and/or HR role.")
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
     .addChannelOption((o) =>
       o.setName("channel")
@@ -100,13 +151,13 @@ const commands = [
     )
     .addRoleOption((o) =>
       o.setName("role")
-        .setDescription("The HR role to ping on new applications (auto-detected for known servers).")
+        .setDescription("The HR role to ping (auto-detected for known servers).")
         .setRequired(false)
     ),
 
   new SlashCommandBuilder()
     .setName("setrole")
-    .setDescription("(Admin) Set or update the HR role to ping on new applications.")
+    .setDescription("(Admin) Override the auto-detected HR role.")
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
     .addRoleOption((o) =>
       o.setName("role").setDescription("The HR role.").setRequired(true)
@@ -169,13 +220,15 @@ function buildPanelRow() {
 }
 
 // ─── Shared application flow ──────────────────────────────────────────────────
-// Runs the full DM Q&A and posts the result to a private thread.
-// Returns true on success, false on failure.
 
 async function runApplication(user, guild) {
   const guildConfig = getGuild(guild.id);
-  if (!guildConfig?.applicationChannel) return { ok: false, reason: "no_setup" };
-  if (isBlacklisted(guild.id, user.id))  return { ok: false, reason: "blacklisted" };
+
+  if (isBlacklisted(guild.id, user.id)) return { ok: false, reason: "blacklisted" };
+
+  // Resolve channel — auto-detected or manually configured
+  const appChannel = resolveAppChannel(guild, guildConfig?.applicationChannel);
+  if (!appChannel) return { ok: false, reason: "no_channel" };
 
   let dmChannel;
   try {
@@ -208,25 +261,19 @@ async function runApplication(user, guild) {
 
   await dmChannel.send("✅ **Your application has been submitted!** You'll be notified once a decision is made.");
 
-  const appChannel = guild.channels.cache.get(guildConfig.applicationChannel);
-  if (!appChannel) {
-    await dmChannel.send("❌ Could not find the applications channel. Please contact an admin.");
-    return { ok: false, reason: "no_channel" };
-  }
-
   // Build result embed
   const embed = new EmbedBuilder()
     .setTitle("📄 New Staff Application")
     .setColor(0x5865f2)
     .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL() })
     .setTimestamp()
-    .setFooter({ text: `User ID: ${user.id}` });
+    .setFooter({ text: `User ID: ${user.id} • ${guild.name}` });
 
   questions.forEach((q, i) => {
     embed.addFields({ name: q, value: answers[i] || "*No answer*", inline: false });
   });
 
-  // Create private thread
+  // Create private thread inside the resolved channel
   let thread;
   try {
     thread = await appChannel.threads.create({
@@ -250,7 +297,7 @@ async function runApplication(user, guild) {
     components: [buildReviewRow()],
   });
 
-  console.log(`📄 Application thread created for ${user.tag} (${user.id}) → ${thread.id}`);
+  console.log(`📄 [${guild.name}] Thread for ${user.tag} → #${appChannel.name} → ${thread.id}`);
   return { ok: true };
 }
 
@@ -287,17 +334,29 @@ client.on("interactionCreate", async (interaction) => {
 
     // /help
     if (commandName === "help") {
+      const cfg    = getServerConfig(guild);
+      const savedCh = resolveAppChannel(guild, getGuild(guild.id)?.applicationChannel);
+      const hrRole  = resolveHRRole(guild, getGuild(guild.id)?.hrRole);
+
       const embed = new EmbedBuilder()
         .setTitle("📋 Apply Bot — Commands")
         .setColor(0x5865f2)
         .addFields(
-          { name: "`/panel`",       value: "*(Admin)* Post the application panel in a channel.",              inline: false },
-          { name: "`/apply`",       value: "Start a staff application via DM.",                               inline: false },
-          { name: "`/setup`",       value: "*(Admin)* Set the applications channel and optional HR role.",    inline: false },
-          { name: "`/setrole`",     value: "*(Admin)* Set or update the HR role to ping.",                    inline: false },
-          { name: "`/blacklist`",   value: "*(Mod)* Prevent a user from applying.",                           inline: false },
-          { name: "`/unblacklist`", value: "*(Admin)* Remove a user from the blacklist.",                     inline: false },
+          { name: "`/panel`",       value: "*(Admin)* Post the application panel in a channel.",                                  inline: false },
+          { name: "`/apply`",       value: "Start a staff application via DM.",                                                   inline: false },
+          { name: "`/setup`",       value: "*(Admin)* Override the auto-detected application channel and/or HR role.",            inline: false },
+          { name: "`/setrole`",     value: "*(Admin)* Override the auto-detected HR role.",                                       inline: false },
+          { name: "`/blacklist`",   value: "*(Mod)* Prevent a user from applying.",                                               inline: false },
+          { name: "`/unblacklist`", value: "*(Admin)* Remove a user from the blacklist.",                                         inline: false },
         )
+        .addFields({
+          name: "⚙️ This server",
+          value: [
+            `**Channel:** ${savedCh ? `<#${savedCh.id}>` : cfg ? `auto-detecting by name` : "not configured — use \`/setup\`"}`,
+            `**HR Role:** ${hrRole ? `<@&${hrRole.id}>` : "not found"}`,
+          ].join("\n"),
+          inline: false,
+        })
         .setTimestamp();
       return interaction.reply({ embeds: [embed], ephemeral: true });
     }
@@ -362,12 +421,17 @@ client.on("interactionCreate", async (interaction) => {
 
     // /apply
     if (commandName === "apply") {
-      const guildConfig = getGuild(guild.id);
-      if (!guildConfig?.applicationChannel) {
-        return interaction.reply({ content: "❌ Applications are not set up yet. Ask an admin to run `/setup`.", ephemeral: true });
-      }
       if (isBlacklisted(guild.id, user.id)) {
         return interaction.reply({ content: "🚫 You are blacklisted from submitting applications.", ephemeral: true });
+      }
+
+      const guildConfig = getGuild(guild.id);
+      const appChannel  = resolveAppChannel(guild, guildConfig?.applicationChannel);
+      if (!appChannel) {
+        return interaction.reply({
+          content: "❌ No application channel found for this server. Ask an admin to run `/setup`.",
+          ephemeral: true,
+        });
       }
 
       // Test DM access before replying
@@ -403,15 +467,12 @@ client.on("interactionCreate", async (interaction) => {
 
       await dmChannel.send("✅ **Your application has been submitted!** You'll be notified once a decision is made.");
 
-      const appChannel = guild.channels.cache.get(getGuild(guild.id).applicationChannel);
-      if (!appChannel) return dmChannel.send("❌ Could not find the applications channel. Please contact an admin.");
-
       const embed = new EmbedBuilder()
         .setTitle("📄 New Staff Application")
         .setColor(0x5865f2)
         .setAuthor({ name: user.tag, iconURL: user.displayAvatarURL() })
         .setTimestamp()
-        .setFooter({ text: `User ID: ${user.id}` });
+        .setFooter({ text: `User ID: ${user.id} • ${guild.name}` });
       questions.forEach((q, i) => embed.addFields({ name: q, value: answers[i] || "*No answer*", inline: false }));
 
       let thread;
@@ -427,10 +488,10 @@ client.on("interactionCreate", async (interaction) => {
         return dmChannel.send("❌ Could not create a private thread. Please contact an admin.");
       }
 
-      const hrRole   = resolveHRRole(guild, getGuild(guild.id)?.hrRole);
+      const hrRole   = resolveHRRole(guild, guildConfig?.hrRole);
       const pingLine = hrRole ? `<@&${hrRole.id}> — new application to review.\n` : "";
       await thread.send({ content: `${pingLine}**Applicant:** <@${user.id}>`, embeds: [embed], components: [buildReviewRow()] });
-      console.log(`📄 Thread for ${user.tag} → ${thread.id}`);
+      console.log(`📄 [${guild.name}] Thread for ${user.tag} → #${appChannel.name} → ${thread.id}`);
     }
 
     return;
@@ -441,23 +502,25 @@ client.on("interactionCreate", async (interaction) => {
 
     // ── Apply panel button ──
     if (interaction.customId === "panel_apply") {
-      const guild       = interaction.guild;
-      const user        = interaction.user;
-      const guildConfig = getGuild(guild.id);
+      const { guild, user } = interaction;
 
-      if (!guildConfig?.applicationChannel) {
-        return interaction.reply({ content: "❌ Applications are not set up yet. Ask an admin to run `/setup`.", ephemeral: true });
-      }
       if (isBlacklisted(guild.id, user.id)) {
         return interaction.reply({ content: "🚫 You are blacklisted from submitting applications.", ephemeral: true });
       }
 
-      // Acknowledge immediately so the button doesn't time out
+      const guildConfig = getGuild(guild.id);
+      const appChannel  = resolveAppChannel(guild, guildConfig?.applicationChannel);
+      if (!appChannel) {
+        return interaction.reply({
+          content: "❌ No application channel found for this server. Ask an admin to run `/setup`.",
+          ephemeral: true,
+        });
+      }
+
       await interaction.reply({ content: "📬 Check your DMs — your application has started!", ephemeral: true });
 
       const result = await runApplication(user, guild);
       if (!result.ok && result.reason === "no_dm") {
-        // Edit the ephemeral reply to inform them
         await interaction.editReply({ content: "❌ I couldn't DM you. Please enable DMs from server members and try again." });
       }
       return;
