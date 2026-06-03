@@ -12,16 +12,21 @@
     "Is there anything else you'd like us to know about you?"
   ],
   "mod": [
-    "What is your username and age?",
-    "What timezone are you in and how many hours per day can you be active?",
-    "Do you have any previous moderation experience on Discord? If yes, describe it.",
-    "Why do you want to be a moderator in this server?",
-    "A member is spamming advertisements outside of the allowed channels. How do you handle it?",
-    "Someone is being verbally abusive toward other members in chat. What steps do you take?",
-    "How do you handle a situation where you are unsure whether something breaks the rules?",
-    "Are you familiar with Discord's Terms of Service and Community Guidelines?",
-    "Are you currently a moderator in any other servers? If so, which ones?",
-    "Is there anything else you'd like us to know about you?"
+    "What is your Discord username and ID?",
+    "How old are you?",
+    "What timezone are you in, and what is your typical availability?",
+    "Have you moderated any Discord servers before? If yes, briefly describe your experience.",
+    "Why do you want to become a moderator in this server?",
+    "What do you think makes a good moderator?",
+    "Why would you be a good fit for the moderation team?",
+    "How active are you in our server, and how long have you been a member?",
+    "A member begins repeatedly advertising outside of the designated advertising channels. What would you do?",
+    "Two members are arguing aggressively in a public channel and disrupting chat. How would you handle the situation?",
+    "A friend of yours breaks a server rule. Would you treat them differently? Why or why not?",
+    "You notice another moderator abusing their permissions or acting unprofessionally. What would you do?",
+    "A member sends you a DM claiming they were punished unfairly by another staff member. How would you respond?",
+    "You log on and see that several channels are flooded with spam messages. What actions would you take first?",
+    "Is there anything else you would like to add?"
   ],
   "partnership": [
     "What is your username and age?",
