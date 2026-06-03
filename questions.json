@@ -1,15 +1,20 @@
 {
   "hr": [
-    "What is your username and age?",
-    "What timezone are you in and how many hours per day can you dedicate to the server?",
-    "Do you have any previous HR or staff management experience? If yes, please describe it.",
-    "Why do you want to join the HR team of this server specifically?",
-    "How would you handle a staff member who is repeatedly failing to do their duties?",
-    "What would you do if two staff members came to you with a conflict between them?",
-    "How do you stay organised when managing multiple responsibilities at once?",
-    "Are you currently staff in any other Discord servers? If so, which ones and what is your role?",
-    "What does good HR management mean to you in a Discord community?",
-    "Is there anything else you'd like us to know about you?"
+    "What is your Discord username and ID?",
+    "How old are you?",
+    "What timezone are you in, and what is your typical availability?",
+    "Have you held any HR, management, staffing, or leadership positions before? If yes, describe them briefly.",
+    "Why do you want to join the HR team and why would you be a good fit?",
+    "What do you believe are the main responsibilities of an HR staff member in an advertising server?",
+    "What qualities do you look for when reviewing staff applications?",
+    "How would you ensure applicants are treated fairly and without bias?",
+    "You receive two staff applications. One applicant is very active but has little experience, while the other has lots of experience but is rarely active. How would you evaluate them?",
+    "A staff member has become inactive without notifying anyone. What would you do?",
+    "You notice a staff member showing signs of burnout and losing motivation. How would you handle the situation?",
+    "An applicant becomes upset after being denied and starts arguing with HR staff. How would you respond?",
+    "Another HR member is accepting applicants based on friendships rather than qualifications. What would you do?",
+    "You are tasked with increasing staff activity and recruitment. What steps would you take?",
+    "Is there anything else you'd like to add?"
   ],
   "mod": [
     "What is your Discord username and ID?",
