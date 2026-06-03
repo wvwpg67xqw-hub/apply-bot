@@ -14,8 +14,9 @@ const {
 const { read, write } = require("./utils/jsondb");
 const questions = require("./questions.json");
 
-const GUILDS_PATH = "./data/guilds.json";
-const CONFIG_PATH = "./data/config.json";
+const GUILDS_PATH  = "./data/guilds.json";
+const CONFIG_PATH  = "./data/config.json";
+const STAFF_INVITE = "https://discord.gg/qcXfZqQVC4";
 
 // ─── Role type metadata ───────────────────────────────────────────────────────
 
@@ -271,6 +272,17 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
     .addRoleOption((o) =>
       o.setName("role").setDescription("The HR role.").setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("setacceptroles")
+    .setDescription("(Admin) Set the roles given to a user when their application is accepted.")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    .addRoleOption((o) =>
+      o.setName("team").setDescription("The staff team role to grant on accept.").setRequired(true)
+    )
+    .addRoleOption((o) =>
+      o.setName("normal").setDescription("The normal/member role to grant on accept.").setRequired(true)
     ),
 
   new SlashCommandBuilder()
@@ -586,6 +598,21 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: `✅ HR role set to ${role}.`, ephemeral: true });
     }
 
+    // /setacceptroles
+    if (commandName === "setacceptroles") {
+      const teamRole   = interaction.options.getRole("team");
+      const normalRole = interaction.options.getRole("normal");
+      setGuildConfig(guild.id, { teamRoleId: teamRole.id, normalRoleId: normalRole.id });
+      return interaction.reply({
+        content:
+          `✅ Accept roles set for **${guild.name}**.\n` +
+          `**Team role:** ${teamRole}\n` +
+          `**Normal role:** ${normalRole}\n\n` +
+          `These will be granted to applicants when their application is accepted.`,
+        ephemeral: true,
+      });
+    }
+
     // /blacklist
     if (commandName === "blacklist") {
       const target = interaction.options.getUser("user");
@@ -751,22 +778,58 @@ client.on("interactionCreate", async (interaction) => {
         await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
         await interaction.reply({ content: `✅ **${meta.label}** application **accepted** by ${reviewer}.` });
 
+        // Grant team + normal roles in the source server
+        const sourceGuild   = client.guilds.cache.find((g) => g.name === sourceGuildName);
+        const sourceGuildCfg = sourceGuild ? getGuild(sourceGuild.id) : null;
+        const rolesGranted  = [];
+        const roleErrors    = [];
+
+        if (sourceGuild && sourceGuildCfg) {
+          let member = null;
+          try { member = await sourceGuild.members.fetch(applicantId); } catch {}
+
+          if (member) {
+            for (const [key, label] of [["teamRoleId", "team"], ["normalRoleId", "normal"]]) {
+              const roleId = sourceGuildCfg[key];
+              if (!roleId) continue;
+              try {
+                await member.roles.add(roleId);
+                rolesGranted.push(`<@&${roleId}>`);
+              } catch {
+                roleErrors.push(label);
+              }
+            }
+          } else {
+            roleErrors.push("member not found in source server");
+          }
+        }
+
+        // Report role grant outcome in the thread
+        if (rolesGranted.length) {
+          await interaction.channel.send(`✅ Roles granted in **${sourceGuildName}**: ${rolesGranted.join(", ")}`);
+        }
+        if (roleErrors.length) {
+          await interaction.channel.send(`⚠️ Could not grant some roles in **${sourceGuildName}**: ${roleErrors.join(", ")} — check bot permissions and role IDs.`);
+        }
+
         const resultEmbed = new EmbedBuilder()
           .setTitle(`✅ Application Accepted`)
           .setColor(0x57f287)
           .addFields(
-            { name: "Applicant", value: `<@${applicantId}>`, inline: true },
-            { name: "Role",      value: `${meta.emoji} ${meta.label}`,    inline: true },
-            { name: "Server",    value: sourceGuildName,                   inline: true },
-            { name: "Reviewed by", value: reviewer,                        inline: true },
+            { name: "Applicant",   value: `<@${applicantId}>`,         inline: true },
+            { name: "Role",        value: `${meta.emoji} ${meta.label}`, inline: true },
+            { name: "Server",      value: sourceGuildName,               inline: true },
+            { name: "Reviewed by", value: reviewer,                      inline: true },
           )
           .setTimestamp();
         await postResult(resultEmbed);
 
+        // DM the applicant with congratulations + staff server invite
         try {
           await applicantUser?.send(
-            `✅ **Your ${meta.label} application has been accepted!** Congratulations! ` +
-            `A staff member from **${sourceGuildName}** will reach out to you soon.`
+            `✅ **Your ${meta.label} application to ${sourceGuildName} has been accepted!** Congratulations!\n\n` +
+            `You can join our staff server here: **${STAFF_INVITE}**\n\n` +
+            `A staff member will reach out to you soon.`
           );
         } catch {}
       }
