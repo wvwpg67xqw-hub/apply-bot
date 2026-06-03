@@ -736,12 +736,33 @@ client.on("interactionCreate", async (interaction) => {
       let applicantUser = null;
       try { applicantUser = await client.users.fetch(applicantId); } catch {}
 
+      // Helper — posts a result card to the parent channel (visible outside the thread)
+      const postResult = async (resultEmbed) => {
+        const parentChannel = interaction.channel?.parent;
+        if (parentChannel?.isTextBased()) {
+          try { await parentChannel.send({ embeds: [resultEmbed] }); } catch {}
+        }
+      };
+
       if (interaction.customId === "app_accept") {
         const updated = EmbedBuilder.from(msg.embeds[0])
           .setColor(0x57f287)
           .setTitle(`✅ ${meta.label} Application Accepted — ${sourceGuildName}`);
         await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
         await interaction.reply({ content: `✅ **${meta.label}** application **accepted** by ${reviewer}.` });
+
+        const resultEmbed = new EmbedBuilder()
+          .setTitle(`✅ Application Accepted`)
+          .setColor(0x57f287)
+          .addFields(
+            { name: "Applicant", value: `<@${applicantId}>`, inline: true },
+            { name: "Role",      value: `${meta.emoji} ${meta.label}`,    inline: true },
+            { name: "Server",    value: sourceGuildName,                   inline: true },
+            { name: "Reviewed by", value: reviewer,                        inline: true },
+          )
+          .setTimestamp();
+        await postResult(resultEmbed);
+
         try {
           await applicantUser?.send(
             `✅ **Your ${meta.label} application has been accepted!** Congratulations! ` +
@@ -756,6 +777,19 @@ client.on("interactionCreate", async (interaction) => {
           .setTitle(`❌ ${meta.label} Application Denied — ${sourceGuildName}`);
         await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
         await interaction.reply({ content: `❌ **${meta.label}** application **denied** by ${reviewer}.` });
+
+        const resultEmbed = new EmbedBuilder()
+          .setTitle(`❌ Application Denied`)
+          .setColor(0xed4245)
+          .addFields(
+            { name: "Applicant", value: `<@${applicantId}>`, inline: true },
+            { name: "Role",      value: `${meta.emoji} ${meta.label}`,    inline: true },
+            { name: "Server",    value: sourceGuildName,                   inline: true },
+            { name: "Reviewed by", value: reviewer,                        inline: true },
+          )
+          .setTimestamp();
+        await postResult(resultEmbed);
+
         try {
           await applicantUser?.send(
             `❌ **Your ${meta.label} application has been denied.** ` +
@@ -774,6 +808,19 @@ client.on("interactionCreate", async (interaction) => {
           .setTitle(`🚫 ${meta.label} Application Denied & Blacklisted — ${sourceGuildName}`);
         await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
         await interaction.reply({ content: `🚫 **${meta.label}** application **denied & user blacklisted** by ${reviewer}.` });
+
+        const resultEmbed = new EmbedBuilder()
+          .setTitle(`🚫 Application Denied & Blacklisted`)
+          .setColor(0x000000)
+          .addFields(
+            { name: "Applicant", value: `<@${applicantId}>`, inline: true },
+            { name: "Role",      value: `${meta.emoji} ${meta.label}`,    inline: true },
+            { name: "Server",    value: sourceGuildName,                   inline: true },
+            { name: "Reviewed by", value: reviewer,                        inline: true },
+          )
+          .setTimestamp();
+        await postResult(resultEmbed);
+
         try {
           await applicantUser?.send(
             `🚫 **Your ${meta.label} application has been denied** and you have been blacklisted ` +
