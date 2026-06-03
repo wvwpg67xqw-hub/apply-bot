@@ -918,44 +918,53 @@ client.on("interactionCreate", async (interaction) => {
           .setTimestamp();
         await postResult(resultEmbed);
 
-        // Post hire announcement to the dedicated hired channel
-        try {
-          const hireChannel = await client.channels.fetch(HIRE_CHANNEL_ID);
-          if (hireChannel?.isTextBased()) {
-            const guides      = ROLE_GUIDES[roleType];
-            const guideFields = guides
-              ? [
-                  { name: "📖 Guide",  value: guides.guide, inline: false },
-                  { name: "📋 Tasks",  value: guides.tasks, inline: false },
-                ]
-              : [];
+        // Post hire announcement (Partnership Managers stay in the main server — no announcement)
+        if (roleType !== "partnership") {
+          try {
+            const hireChannel = await client.channels.fetch(HIRE_CHANNEL_ID);
+            if (hireChannel?.isTextBased()) {
+              const guides      = ROLE_GUIDES[roleType];
+              const guideFields = guides
+                ? [
+                    { name: "📖 Guide", value: guides.guide, inline: false },
+                    { name: "📋 Tasks", value: guides.tasks, inline: false },
+                  ]
+                : [];
 
-            const hireEmbed = new EmbedBuilder()
-              .setTitle(`🎉 New Staff Member Hired!`)
-              .setColor(0x57f287)
-              .setDescription(`Congratulations to <@${applicantId}> on being accepted as **${meta.emoji} ${meta.label}** at **${sourceGuildName}**!`)
-              .addFields(
-                { name: "👤 Staff Member", value: `<@${applicantId}>`, inline: true },
-                { name: "📌 Role",         value: `${meta.emoji} ${meta.label}`, inline: true },
-                { name: "🏠 Server",       value: sourceGuildName, inline: true },
-                ...guideFields,
-              )
-              .setFooter({ text: guides ? "Please read your guide and tasks before getting started." : "Welcome to the team!" })
-              .setTimestamp();
+              const hireEmbed = new EmbedBuilder()
+                .setTitle(`🎉 New Staff Member Hired!`)
+                .setColor(0x57f287)
+                .setDescription(`Congratulations to <@${applicantId}> on being accepted as **${meta.emoji} ${meta.label}** at **${sourceGuildName}**!`)
+                .addFields(
+                  { name: "👤 Staff Member", value: `<@${applicantId}>`, inline: true },
+                  { name: "📌 Role",         value: `${meta.emoji} ${meta.label}`, inline: true },
+                  { name: "🏠 Server",       value: sourceGuildName, inline: true },
+                  ...guideFields,
+                )
+                .setFooter({ text: guides ? "Please read your guide and tasks before getting started." : "Welcome to the team!" })
+                .setTimestamp();
 
-            await hireChannel.send({ content: `<@${applicantId}>`, embeds: [hireEmbed] });
+              await hireChannel.send({ content: `<@${applicantId}>`, embeds: [hireEmbed] });
+            }
+          } catch (err) {
+            console.error("[hire-announce] Failed to post hire embed:", err.message);
           }
-        } catch (err) {
-          console.error("[hire-announce] Failed to post hire embed:", err.message);
         }
 
-        // DM the applicant with congratulations + staff server invite
+        // DM the applicant — Partnership Managers stay in the main server so no staff invite
         try {
-          await applicantUser?.send(
-            `✅ **Your ${meta.label} application to ${sourceGuildName} has been accepted!** Congratulations!\n\n` +
-            `You can join our staff server here: **${STAFF_INVITE}**\n\n` +
-            `A staff member will reach out to you soon.`
-          );
+          if (roleType === "partnership") {
+            await applicantUser?.send(
+              `✅ **Your ${meta.label} application to ${sourceGuildName} has been accepted!** Congratulations!\n\n` +
+              `A staff member will reach out to you soon.`
+            );
+          } else {
+            await applicantUser?.send(
+              `✅ **Your ${meta.label} application to ${sourceGuildName} has been accepted!** Congratulations!\n\n` +
+              `You can join our staff server here: **${STAFF_INVITE}**\n\n` +
+              `A staff member will reach out to you soon.`
+            );
+          }
         } catch {}
       }
 
