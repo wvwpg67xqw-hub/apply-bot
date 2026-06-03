@@ -20,7 +20,6 @@ const log = require("./utils/logger");
 const GUILDS_PATH           = "./data/guilds.json";
 const CONFIG_PATH           = "./data/config.json";
 const APPS_PATH             = "./data/applications.json";
-const STAFF_INVITE          = "https://discord.gg/qcXfZqQVC4";
 const BLACKLIST_LOG_CHANNEL = "1492165517279232090";
 
 
@@ -179,6 +178,40 @@ function removeFromBlacklistAllGuilds(userId) {
   }
   if (totalRemoved > 0) write(GUILDS_PATH, guilds);
   return totalRemoved;
+}
+
+// ─── Staff invite generator (1-use, 30-min) ──────────────────────────────────
+
+async function generateStaffInvite(client) {
+  const cfg = getConfig();
+  if (!cfg.staffGuildId) return null;
+  const staffGuild = client.guilds.cache.get(cfg.staffGuildId);
+  if (!staffGuild) return null;
+
+  let channel = null;
+  if (cfg.inviteChannelId) {
+    channel = staffGuild.channels.cache.get(cfg.inviteChannelId) ?? null;
+  }
+  if (!channel) {
+    channel = staffGuild.channels.cache.find(
+      (c) => c.type === ChannelType.GuildText && c.permissionsFor(staffGuild.members.me)?.has("CreateInstantInvite")
+    ) ?? null;
+  }
+  if (!channel) return null;
+
+  try {
+    const invite = await channel.createInvite({
+      maxAge:   1800,
+      maxUses:  1,
+      unique:   true,
+      reason:   "Staff application acceptance — single-use 30 min invite",
+    });
+    log.info("INVITE", `Generated invite ${invite.code} for ${invite.channel.name} (1 use, 30 min)`);
+    return invite.url;
+  } catch (err) {
+    log.error("INVITE", "Failed to generate invite", err.message);
+    return null;
+  }
 }
 
 // ─── Application ID helpers ───────────────────────────────────────────────────
@@ -425,6 +458,14 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
     .addUserOption((o) =>
       o.setName("user").setDescription("The user to unblacklist.").setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName("setinvitechannel")
+    .setDescription("(Admin) Set which channel staff invite links are created for.")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    .addChannelOption((o) =>
+      o.setName("channel").setDescription("The channel to generate invites for.").setRequired(true)
     ),
 
   new SlashCommandBuilder()
@@ -889,6 +930,16 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
+    // /setinvitechannel
+    if (commandName === "setinvitechannel") {
+      const channel = interaction.options.getChannel("channel");
+      setConfig({ inviteChannelId: channel.id });
+      return interaction.reply({
+        content: `✅ Staff invites will now be created for ${channel}. Each accepted applicant gets a unique 1-use link valid for 30 minutes.`,
+        ephemeral: true,
+      });
+    }
+
     // /application
     if (commandName === "application") {
       const rawId  = interaction.options.getString("id").trim();
@@ -1162,9 +1213,13 @@ client.on("interactionCreate", async (interaction) => {
               `A staff member will reach out to you soon.`
             );
           } else {
+            const inviteUrl = await generateStaffInvite(client);
+            const inviteLine = inviteUrl
+              ? `Your personal invite link (1 use, valid for 30 minutes):\n**${inviteUrl}**`
+              : `Please ask a staff member for a server invite.`;
             await applicantUser?.send(
               `✅ **Your ${meta.label} application to ${sourceGuildName} has been accepted!** Congratulations!\n\n` +
-              `You can join our staff server here: **${STAFF_INVITE}**\n\n` +
+              `${inviteLine}\n\n` +
               `A staff member will reach out to you soon.`
             );
           }

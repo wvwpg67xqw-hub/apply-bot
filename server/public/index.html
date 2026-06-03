@@ -263,6 +263,7 @@
     <span class="name" id="header-name">—</span>
     <span style="flex:1"></span>
     <button class="btn btn-primary" id="dm-open-btn" style="font-size:12px;padding:6px 12px;">✉ DM User</button>
+    <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">Click any username or avatar to DM them</span>
   </div>
 
   <div id="messages">
@@ -472,6 +473,8 @@ function appendMessage(m, scroll = false) {
     avatar.className = "msg-avatar";
     avatar.src       = m.avatar;
     avatar.alt       = m.author;
+    avatar.title     = `DM ${m.author.replace(/#\d{4}$/, "")}`;
+    avatar.addEventListener("click", () => openDmModal(m.authorId, m.author));
     wrap.appendChild(avatar);
 
     const content = document.createElement("div");
@@ -483,6 +486,8 @@ function appendMessage(m, scroll = false) {
     const author = document.createElement("span");
     author.className = "msg-author" + (m.bot ? " bot-tag" : "");
     author.textContent = m.author.replace(/#\d{4}$/, "");
+    author.title = `DM ${m.author.replace(/#\d{4}$/, "")}`;
+    author.addEventListener("click", () => openDmModal(m.authorId, m.author));
     header.appendChild(author);
     if (m.bot) {
       const badge = document.createElement("span");
@@ -571,7 +576,16 @@ $("message-input").addEventListener("input", function() {
 });
 
 // ── DM modal ──────────────────────────────────────────────────────────────────
-$("dm-open-btn").addEventListener("click", () => $("dm-modal").classList.add("open"));
+function openDmModal(userId, authorTag) {
+  $("dm-userid").value   = userId ?? "";
+  $("dm-content").value  = "";
+  const label = (authorTag ?? "").replace(/#\d{4}$/, "");
+  $("dm-modal").querySelector("h2").textContent = label ? `✉ DM ${label}` : "✉ Send a DM";
+  $("dm-modal").classList.add("open");
+  setTimeout(() => $("dm-content").focus(), 50);
+}
+
+$("dm-open-btn").addEventListener("click", () => openDmModal("", ""));
 $("dm-cancel").addEventListener("click",   () => $("dm-modal").classList.remove("open"));
 $("dm-modal").addEventListener("click", e => { if (e.target === $("dm-modal")) $("dm-modal").classList.remove("open"); });
 
