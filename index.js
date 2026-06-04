@@ -14,7 +14,7 @@ const {
 const { read, write }      = require("./utils/jsondb");
 const { startCLI }         = require("./utils/cli");
 const { startWebServer }   = require("./server/web");
-const { watchPresence }    = require("./utils/presence");
+const { watchPresence, applyPresence } = require("./utils/presence");
 const questions = require("./questions.json");
 const log = require("./utils/logger");
 
@@ -502,6 +502,44 @@ const commands = [
   new SlashCommandBuilder()
     .setName("help")
     .setDescription("Show all commands and this server's current routing."),
+
+  new SlashCommandBuilder()
+    .setName("setstatus")
+    .setDescription("(Admin) Change the bot's online status.")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    .addStringOption((o) =>
+      o.setName("status")
+        .setDescription("The status to display.")
+        .setRequired(true)
+        .addChoices(
+          { name: "🟢 Online",          value: "online"    },
+          { name: "🟡 Idle",            value: "idle"      },
+          { name: "🔴 Do Not Disturb",  value: "dnd"       },
+          { name: "⚫ Invisible",       value: "invisible" },
+        )
+    ),
+
+  new SlashCommandBuilder()
+    .setName("setactivity")
+    .setDescription("(Admin) Change the bot's activity text.")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    .addStringOption((o) =>
+      o.setName("type")
+        .setDescription("Activity type.")
+        .setRequired(true)
+        .addChoices(
+          { name: "🎮 Playing",   value: "PLAYING"   },
+          { name: "👀 Watching",  value: "WATCHING"  },
+          { name: "🎧 Listening", value: "LISTENING" },
+          { name: "🏆 Competing", value: "COMPETING" },
+          { name: "📡 Streaming", value: "STREAMING" },
+        )
+    )
+    .addStringOption((o) =>
+      o.setName("text")
+        .setDescription("The activity text — e.g. 'for staff', 'applications'.")
+        .setRequired(true)
+    ),
 ].map((c) => c.toJSON());
 
 // ─── Button rows ──────────────────────────────────────────────────────────────
@@ -959,7 +997,28 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    // /setinvitechannel
+    if (commandName === "setstatus") {
+      const status = interaction.options.getString("status");
+      const statusData = read("./data/status.json") ?? {};
+      statusData.status = status;
+      write("./data/status.json", statusData);
+      applyPresence(client);
+      const labels = { online: "🟢 Online", idle: "🟡 Idle", dnd: "🔴 Do Not Disturb", invisible: "⚫ Invisible" };
+      return interaction.reply({ content: `✅ Bot status set to **${labels[status] ?? status}**.`, ephemeral: true });
+    }
+
+    if (commandName === "setactivity") {
+      const type = interaction.options.getString("type");
+      const name = interaction.options.getString("text");
+      const activityData = read("./data/activity.json") ?? {};
+      activityData.type = type;
+      activityData.name = name;
+      write("./data/activity.json", activityData);
+      applyPresence(client);
+      const typeLabel = { PLAYING: "🎮 Playing", WATCHING: "👀 Watching", LISTENING: "🎧 Listening", COMPETING: "🏆 Competing", STREAMING: "📡 Streaming" };
+      return interaction.reply({ content: `✅ Activity set to **${typeLabel[type] ?? type} ${name}**.`, ephemeral: true });
+    }
+
     if (commandName === "setinvitechannel") {
       const channel = interaction.options.getChannel("channel");
       setConfig({ inviteChannelId: channel.id });
