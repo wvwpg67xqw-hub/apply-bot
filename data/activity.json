@@ -1,0 +1,7 @@
+{
+  "_typeOptions": ["PLAYING", "WATCHING", "LISTENING", "COMPETING", "STREAMING", "CUSTOM"],
+  "_note": "For STREAMING, set url to a valid Twitch URL. For CUSTOM, name is shown as-is.",
+  "type": "WATCHING",
+  "name": "staff applications",
+  "url": ""
+}

@@ -14,6 +14,7 @@ const {
 const { read, write }      = require("./utils/jsondb");
 const { startCLI }         = require("./utils/cli");
 const { startWebServer }   = require("./server/web");
+const { watchPresence }    = require("./utils/presence");
 const questions = require("./questions.json");
 const log = require("./utils/logger");
 
@@ -709,6 +710,7 @@ client.once("ready", async () => {
   startWebServer(client, webPort);
 
   await startInviteRotation(client);
+  watchPresence(client);
 });
 
 client.on("guildCreate", async (guild) => {
