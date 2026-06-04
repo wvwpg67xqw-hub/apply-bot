@@ -5,13 +5,13 @@ const { ActivityType } = require("discord.js");
 const STATUS_PATH   = path.resolve(__dirname, "../data/status.json");
 const ACTIVITY_PATH = path.resolve(__dirname, "../data/activity.json");
 
+// ActivityType.Custom is NOT supported for bots — only these work:
 const TYPE_MAP = {
   PLAYING:   ActivityType.Playing,
   WATCHING:  ActivityType.Watching,
   LISTENING: ActivityType.Listening,
   COMPETING: ActivityType.Competing,
   STREAMING: ActivityType.Streaming,
-  CUSTOM:    ActivityType.Custom,
 };
 
 function readJson(filePath) {
@@ -25,32 +25,21 @@ function applyPresence(client) {
   const statusData   = readJson(STATUS_PATH);
   const activityData = readJson(ACTIVITY_PATH);
 
-  const status     = statusData.status     ?? "online";
-  const statusText = statusData.statusText ?? "";
-
+  const status   = statusData.status ?? "online";
   const typeName = (activityData.type ?? "WATCHING").toUpperCase();
   const name     = activityData.name ?? "";
   const url      = activityData.url  ?? "";
 
   const activityType = TYPE_MAP[typeName] ?? ActivityType.Watching;
-  const activities   = [];
 
-  if (statusText) {
-    activities.push({ name: statusText, type: ActivityType.Custom });
-  }
-
-  if (name) {
-    activities.push({
-      name,
-      type: activityType,
-      ...(activityType === ActivityType.Streaming && url ? { url } : {}),
-    });
-  }
+  const activities = name ? [{
+    name,
+    type: activityType,
+    ...(activityType === ActivityType.Streaming && url ? { url } : {}),
+  }] : [];
 
   client.user.setPresence({ status, activities });
-
-  const actLine = name ? `${typeName} ${name}` : "(none)";
-  console.log(`\x1b[35m[PRESENCE]\x1b[0m ${status} | ${statusText ? `"${statusText}" + ` : ""}${actLine}`);
+  console.log(`\x1b[35m[PRESENCE]\x1b[0m Status: ${status} | ${typeName} ${name}`);
 }
 
 function watchPresence(client) {

@@ -1,6 +1,4 @@
 {
   "_options": ["online", "idle", "dnd", "invisible"],
-  "status": "online",
-  "_statusTextNote": "statusText shows as a Custom activity line above the main activity",
-  "statusText": "Waiting for applications 👀"
+  "status": "online"
 }
