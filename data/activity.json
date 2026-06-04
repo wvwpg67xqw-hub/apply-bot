@@ -2,6 +2,6 @@
   "_typeOptions": ["PLAYING", "WATCHING", "LISTENING", "COMPETING", "STREAMING"],
   "_note": "For STREAMING, set url to a valid Twitch URL.",
   "type": "WATCHING",
-  "name": "for staff 👀",
+  "name": "for staff",
   "url": ""
 }
