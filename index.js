@@ -15,6 +15,8 @@ const { read, write }      = require("./utils/jsondb");
 const { startCLI }         = require("./utils/cli");
 const { startWebServer }   = require("./server/web");
 const { watchPresence, applyPresence } = require("./utils/presence");
+const { DEV_COMMANDS, handleDevCommand } = require("./devSystem");
+const { devLog }           = require("./utils/devlog");
 const questions = require("./questions.json");
 const log = require("./utils/logger");
 
@@ -535,6 +537,8 @@ const commands = [
     ),
 ].map((c) => c.toJSON());
 
+const allCommands = [...commands, ...DEV_COMMANDS];
+
 // ─── Button rows ──────────────────────────────────────────────────────────────
 
 function buildReviewRow(disabled = false) {
@@ -707,8 +711,8 @@ client.once("ready", async () => {
   const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
   try {
     log.info("COMMANDS", "Registering global slash commands...");
-    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-    log.info("COMMANDS", `Registered ${commands.length} slash commands globally`);
+    await rest.put(Routes.applicationCommands(client.user.id), { body: allCommands });
+    log.info("COMMANDS", `Registered ${allCommands.length} slash commands globally`);
   } catch (err) {
     log.error("COMMANDS", "Failed to register slash commands", err.message);
   }
@@ -775,6 +779,31 @@ client.on("interactionCreate", async (interaction) => {
   if (interaction.isChatInputCommand()) {
     const { commandName, guild, user } = interaction;
     log.info("CMD", `/${commandName} — ${user.tag} (${user.id}) in [${guild?.name}]`);
+
+    // Route dev commands first
+    try {
+      const handled = await handleDevCommand(interaction, client, { allCommandsJson: allCommands });
+      if (handled) {
+        devLog(client, "devLogs", {
+          title: `🛠️ Dev Command: /${commandName}`,
+          fields: [
+            { name: "By",    value: `<@${user.id}> (${user.tag})`, inline: true },
+            { name: "Guild", value: guild?.name ?? "Unknown",       inline: true },
+          ],
+        });
+        return;
+      }
+    } catch (err) {
+      log.error("DEV", `Dev command error in /${commandName}`, err.message);
+      devLog(client, "devErrors", {
+        title: `❌ Dev Command Error: /${commandName}`,
+        fields: [
+          { name: "Error",  value: err.message,                    inline: false },
+          { name: "By",     value: `<@${user.id}> (${user.tag})`, inline: true  },
+        ],
+      });
+      return;
+    }
 
     // /setstaffserver
     if (commandName === "setstaffserver") {
