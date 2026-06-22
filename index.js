@@ -403,10 +403,6 @@ const commands = [
     ),
 
   new SlashCommandBuilder()
-    .setName("apply")
-    .setDescription("Submit a staff application — questions will be sent to your DMs."),
-
-  new SlashCommandBuilder()
     .setName("setroute")
     .setDescription("(Admin) Manually route this server's apps to a specific channel ID.")
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
@@ -856,7 +852,6 @@ client.on("interactionCreate", async (interaction) => {
         .addFields(
           { name: "`/setstaffserver`", value: "*(Admin, staff server)* Create all app channels and link every server.", inline: false },
           { name: "`/panel`",          value: "*(Admin)* Post the HR / Mod / Partnership panel.",                       inline: false },
-          { name: "`/apply`",          value: "Start an application via DM.",                                           inline: false },
           { name: "`/setroute`",       value: "*(Admin)* Manually route apps to a specific channel ID.",               inline: false },
           { name: "`/setup`",          value: "*(Admin)* Set a fallback channel + optional HR role.",                  inline: false },
           { name: "`/setrole`",        value: "*(Admin)* Override the HR role to ping.",                               inline: false },
@@ -1106,30 +1101,6 @@ client.on("interactionCreate", async (interaction) => {
 
       await target.send({ embeds: [panelEmbed], components: [buildPanelRow()] });
       return interaction.reply({ content: `✅ Panel sent to ${target}.`, ephemeral: true });
-    }
-
-    // /apply (text command fallback — asks user to pick a role)
-    if (commandName === "apply") {
-      if (isBlacklisted(guild.id, user.id)) {
-        return interaction.reply({ content: "🚫 You are blacklisted from submitting applications.", ephemeral: true });
-      }
-      const resolved = await resolveAppChannel(client, guild, getGuild(guild.id));
-      if (!resolved) {
-        return interaction.reply({
-          content: "❌ No application channel configured. Ask an admin to run `/setstaffserver` in the staff server.",
-          ephemeral: true,
-        });
-      }
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("apply_pick_hr").setLabel("HR").setStyle(ButtonStyle.Primary).setEmoji("👥"),
-        new ButtonBuilder().setCustomId("apply_pick_mod").setLabel("Mod").setStyle(ButtonStyle.Danger).setEmoji("🔨"),
-        new ButtonBuilder().setCustomId("apply_pick_partnership").setLabel("Partnership Manager").setStyle(ButtonStyle.Success).setEmoji("🤝")
-      );
-      return interaction.reply({
-        content: "Which role would you like to apply for?",
-        components: [row],
-        ephemeral: true,
-      });
     }
 
     return;
