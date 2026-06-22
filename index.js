@@ -87,13 +87,6 @@ const SERVER_CONFIG_MAP = [
     reviewerRoleId: "1488370171293733000",
   },
   {
-    match:          "prime promotions",
-    channelName:    "prime-promotions-apps",
-    channelNames:   ["prime-promotions-apps", "prime-promotions", "pp-apps"],
-    roleName:       "Prime Promotions Apps",
-    reviewerRoleId: "1488375900629106808",
-  },
-  {
     match:          "shadow advertising",
     channelName:    "shadow-advertising-apps",
     channelNames:   ["shadow-advertising-apps", "shadow-advertising", "sa-apps"],
