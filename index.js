@@ -199,12 +199,12 @@ async function _buildInvite(client) {
 
   try {
     const invite = await channel.createInvite({
-      maxAge:  1800,
+      maxAge:  86400,
       maxUses: 1,
       unique:  true,
-      reason:  "Staff application acceptance — single-use 30 min rotating invite",
+      reason:  "Staff application acceptance — single-use 24 hour rotating invite",
     });
-    log.info("INVITE", `Generated invite ${invite.code} → #${invite.channel.name} (1 use, 30 min)`);
+    log.info("INVITE", `Generated invite ${invite.code} → #${invite.channel.name} (1 use, 24 hr)`);
     return invite.url;
   } catch (err) {
     log.error("INVITE", "Failed to generate invite", err.message);
@@ -217,9 +217,9 @@ async function startInviteRotation(client) {
   _cachedInviteUrl = await _buildInvite(client);
 
   _inviteRefreshTimer = setInterval(async () => {
-    log.info("INVITE", "30-min rotation — generating new invite...");
+    log.info("INVITE", "24-hr rotation — generating new invite...");
     _cachedInviteUrl = await _buildInvite(client);
-  }, 30 * 60 * 1000);
+  }, 24 * 60 * 60 * 1000);
 }
 
 async function generateStaffInvite(client) {
@@ -1016,7 +1016,7 @@ client.on("interactionCreate", async (interaction) => {
       const channel = interaction.options.getChannel("channel");
       setConfig({ inviteChannelId: channel.id });
       return interaction.reply({
-        content: `✅ Staff invites will now be created for ${channel}. Each accepted applicant gets a unique 1-use link valid for 30 minutes.`,
+        content: `✅ Staff invites will now be created for ${channel}. Each accepted applicant gets a unique 1-use link valid for 24 hours.`,
         ephemeral: true,
       });
     }
