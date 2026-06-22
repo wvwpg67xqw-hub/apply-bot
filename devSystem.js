@@ -13,6 +13,8 @@ const { read, write } = require("./utils/jsondb");
 const { devLog }      = require("./utils/devlog");
 const log             = require("./utils/logger");
 
+const DEV_GUILD_ID = "1472759140232204551";
+
 const CONFIG_PATH = "./data/config.json";
 const DATA_FILES  = {
   guilds:       "./data/guilds.json",
@@ -136,10 +138,10 @@ function formatUptime(seconds) {
 }
 
 async function reRegisterCommands(client, allCommandsJson) {
-  const token     = process.env.DISCORD_TOKEN;
-  const clientId  = client.user.id;
-  const rest      = new REST({ version: "10" }).setToken(token);
-  await rest.put(Routes.applicationCommands(clientId), { body: allCommandsJson });
+  const token    = process.env.DISCORD_TOKEN;
+  const clientId = client.user.id;
+  const rest     = new REST({ version: "10" }).setToken(token);
+  await rest.put(Routes.applicationGuildCommands(clientId, DEV_GUILD_ID), { body: allCommandsJson });
 }
 
 // ─── Slash command definitions ────────────────────────────────────────────────
@@ -270,9 +272,14 @@ async function handleDevCommand(interaction, client, helpers) {
   // ── /setupdev ────────────────────────────────────────────────────────────────
   if (commandName === "setupdev") {
     await interaction.deferReply({ ephemeral: true });
-    const devRole = interaction.options.getRole("role");
+    const devRole  = interaction.options.getRole("role");
+    const devGuild = client.guilds.cache.get(DEV_GUILD_ID);
+    if (!devGuild) {
+      await interaction.editReply(`❌ Dev guild \`${DEV_GUILD_ID}\` not found — make sure the bot is in that server.`);
+      return true;
+    }
     try {
-      const { lines, category } = await setupDevCategory(guild, devRole);
+      const { lines, category } = await setupDevCategory(devGuild, devRole);
       await interaction.editReply({
         content:
           `✅ Dev system set up under **${category.name}**.\n\n` +
@@ -648,4 +655,4 @@ async function handleDevCommand(interaction, client, helpers) {
   return false;
 }
 
-module.exports = { DEV_COMMANDS, handleDevCommand, setupDevCategory };
+module.exports = { DEV_COMMANDS, handleDevCommand, setupDevCategory, DEV_GUILD_ID };

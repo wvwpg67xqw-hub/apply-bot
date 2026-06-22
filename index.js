@@ -15,7 +15,7 @@ const { read, write }      = require("./utils/jsondb");
 const { startCLI }         = require("./utils/cli");
 const { startWebServer }   = require("./server/web");
 const { watchPresence, applyPresence } = require("./utils/presence");
-const { DEV_COMMANDS, handleDevCommand } = require("./devSystem");
+const { DEV_COMMANDS, handleDevCommand, DEV_GUILD_ID } = require("./devSystem");
 const { devLog }           = require("./utils/devlog");
 const questions = require("./questions.json");
 const log = require("./utils/logger");
@@ -711,10 +711,17 @@ client.once("ready", async () => {
   const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
   try {
     log.info("COMMANDS", "Registering global slash commands...");
-    await rest.put(Routes.applicationCommands(client.user.id), { body: allCommands });
-    log.info("COMMANDS", `Registered ${allCommands.length} slash commands globally`);
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    log.info("COMMANDS", `Registered ${commands.length} global commands`);
   } catch (err) {
-    log.error("COMMANDS", "Failed to register slash commands", err.message);
+    log.error("COMMANDS", "Failed to register global commands", err.message);
+  }
+  try {
+    log.info("COMMANDS", `Registering ${DEV_COMMANDS.length} dev commands to guild ${DEV_GUILD_ID}...`);
+    await rest.put(Routes.applicationGuildCommands(client.user.id, DEV_GUILD_ID), { body: DEV_COMMANDS });
+    log.info("COMMANDS", `Registered ${DEV_COMMANDS.length} dev commands (guild-only)`);
+  } catch (err) {
+    log.error("COMMANDS", "Failed to register dev guild commands", err.message);
   }
 
   // Link any unlinked guilds if a staff server is already configured
