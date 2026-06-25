@@ -23,7 +23,11 @@ const log = require("./utils/logger");
 const GUILDS_PATH           = "./data/guilds.json";
 const CONFIG_PATH           = "./data/config.json";
 const APPS_PATH             = "./data/applications.json";
-const BLACKLIST_LOG_CHANNEL = "1492165517279232090";
+const BLACKLIST_LOG_CHANNEL  = "1492165517279232090";
+const PENDING_JOINS_PATH     = "./data/pending_joins.json";
+const JOIN_ALERT_ROLE_ID     = "1487771497316749312";
+const JOIN_ALERT_CHANNEL_ID  = "1519706422735274195";
+const DEFAULT_JOIN_TIMEOUT   = 48 * 60 * 60 * 1000;
 
 
 // ─── Blacklist log helper ─────────────────────────────────────────────────────
@@ -268,6 +272,69 @@ function parseDuration(str) {
   return Date.now() + n * ms[unit];
 }
 
+function parseDurationMs(str) {
+  if (!str) return null;
+  const match = str.match(/^(\d+)\s*(m|h|d|w)$/i);
+  if (!match) return null;
+  const n = parseInt(match[1], 10);
+  const unit = match[2].toLowerCase();
+  const ms = { m: 60_000, h: 3_600_000, d: 86_400_000, w: 604_800_000 };
+  return n * ms[unit];
+}
+
+// ─── Pending join tracker ─────────────────────────────────────────────────────
+
+function getPendingJoins() { return read(PENDING_JOINS_PATH); }
+
+function addPendingJoin(entry) {
+  const list = getPendingJoins();
+  list.push(entry);
+  write(PENDING_JOINS_PATH, list);
+}
+
+function removePendingJoin(userId) {
+  const list = getPendingJoins().filter((e) => e.userId !== userId);
+  write(PENDING_JOINS_PATH, list);
+}
+
+function getJoinTimeoutMs() {
+  return getConfig().joinTimeoutMs ?? DEFAULT_JOIN_TIMEOUT;
+}
+
+async function startJoinWatcher(client) {
+  setInterval(async () => {
+    const list    = getPendingJoins();
+    const timeout = getJoinTimeoutMs();
+    const now     = Date.now();
+    const expired = list.filter((e) => now - e.invitedAt >= timeout);
+    if (!expired.length) return;
+
+    let alertChannel = null;
+    try {
+      alertChannel = await client.channels.fetch(JOIN_ALERT_CHANNEL_ID);
+    } catch {
+      log.warn("JOIN_WATCH", `Could not fetch alert channel ${JOIN_ALERT_CHANNEL_ID}`);
+      return;
+    }
+    if (!alertChannel?.isTextBased()) return;
+
+    for (const entry of expired) {
+      const hoursAgo = Math.round((now - entry.invitedAt) / 3_600_000);
+      try {
+        await alertChannel.send(
+          `<@&${JOIN_ALERT_ROLE_ID}> ⚠️ **${entry.applicantTag ?? `<@${entry.userId}>`}** was accepted for **${entry.roleType?.toUpperCase() ?? "Staff"}** from **${entry.sourceGuildName}** but has not joined the staff server in **${hoursAgo} hour${hoursAgo === 1 ? "" : "s"}**.`
+        );
+        log.info("JOIN_WATCH", `Alerted: ${entry.applicantTag ?? entry.userId} not joined after ${hoursAgo}h`);
+      } catch (err) {
+        log.error("JOIN_WATCH", "Failed to send join alert", err.message);
+      }
+      removePendingJoin(entry.userId);
+    }
+  }, 60_000);
+
+  log.info("JOIN_WATCH", `Join watcher started — timeout: ${getJoinTimeoutMs() / 60_000} min`);
+}
+
 // ─── Staff server channel setup ───────────────────────────────────────────────
 
 async function autoSetupStaffChannels(client, staffGuild) {
@@ -493,6 +560,16 @@ const commands = [
   new SlashCommandBuilder()
     .setName("help")
     .setDescription("Show all commands and this server's current routing."),
+
+  new SlashCommandBuilder()
+    .setName("setjointimeout")
+    .setDescription("(Admin) Set how long to wait before alerting that an accepted applicant hasn't joined.")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    .addStringOption((o) =>
+      o.setName("duration")
+        .setDescription("Time to wait, e.g. 1m, 30m, 48h, 7d. Default is 48h.")
+        .setRequired(true)
+    ),
 
   new SlashCommandBuilder()
     .setName("setstatus")
@@ -749,11 +826,21 @@ client.once("ready", async () => {
 
   await startInviteRotation(client);
   watchPresence(client);
+  startJoinWatcher(client);
 });
 
 client.on("guildCreate", async (guild) => {
   log.info("GUILD", `Joined guild: ${guild.name}`);
   await autoLinkNewGuild(client, guild);
+});
+
+client.on("guildMemberAdd", (member) => {
+  const cfg = getConfig();
+  if (member.guild.id !== cfg.staffGuildId) return;
+  const pending = getPendingJoins().find((e) => e.userId === member.id);
+  if (!pending) return;
+  removePendingJoin(member.id);
+  log.info("JOIN_WATCH", `${member.user.tag} joined staff server — removed from pending list`);
 });
 
 const AUTO_UNBLACKLIST_ROLE = "1487774070094168135";
@@ -1052,6 +1139,33 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
+    // /setjointimeout
+    if (commandName === "setjointimeout") {
+      const durationStr = interaction.options.getString("duration");
+      const ms          = parseDurationMs(durationStr);
+      if (!ms) {
+        return interaction.reply({
+          content: "❌ Invalid duration. Use formats like `1m`, `30m`, `48h`, `7d`.",
+          ephemeral: true,
+        });
+      }
+      setConfig({ joinTimeoutMs: ms });
+      const friendly = durationStr.endsWith("m")
+        ? `${parseInt(durationStr)} minute${parseInt(durationStr) === 1 ? "" : "s"}`
+        : durationStr.endsWith("h")
+        ? `${parseInt(durationStr)} hour${parseInt(durationStr) === 1 ? "" : "s"}`
+        : durationStr.endsWith("d")
+        ? `${parseInt(durationStr)} day${parseInt(durationStr) === 1 ? "" : "s"}`
+        : durationStr.endsWith("w")
+        ? `${parseInt(durationStr)} week${parseInt(durationStr) === 1 ? "" : "s"}`
+        : durationStr;
+      log.info("CONFIG", `Join timeout set to ${ms}ms (${friendly}) by ${interaction.user.tag}`);
+      return interaction.reply({
+        content: `✅ Join alert timeout set to **${friendly}**. If an accepted applicant hasn't joined the staff server within that time, <@&${JOIN_ALERT_ROLE_ID}> will be pinged in <#${JOIN_ALERT_CHANNEL_ID}>.`,
+        ephemeral: true,
+      });
+    }
+
     // /application
     if (commandName === "application") {
       const rawId  = interaction.options.getString("id").trim();
@@ -1310,6 +1424,18 @@ client.on("interactionCreate", async (interaction) => {
               `${inviteLine}\n\n` +
               `A staff member will reach out to you soon.`
             );
+
+            // Track this user — if they don't join the staff server within the timeout, alert the role
+            if (applicantUser) {
+              addPendingJoin({
+                userId:          applicantUser.id,
+                applicantTag:    applicantUser.tag,
+                sourceGuildName,
+                roleType,
+                invitedAt:       Date.now(),
+              });
+              log.info("JOIN_WATCH", `Tracking pending join for ${applicantUser.tag} (${applicantUser.id})`);
+            }
           }
         } catch {}
       }
