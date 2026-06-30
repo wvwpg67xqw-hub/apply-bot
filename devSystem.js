@@ -76,16 +76,27 @@ async function setupDevCategory(guild, devRole) {
     await category.permissionOverwrites.set(baseOverwrites);
   }
 
+  const savedChannels = getConfig().devChannels || {};
   const devChannelIds = {};
   const lines = [];
 
   for (const def of DEV_CHANNEL_DEFS) {
-    // Look for existing channel in the category
-    let ch = guild.channels.cache.find(
-      c => c.parentId === category.id && c.isTextBased() &&
-           c.name.replace(/\s/g, "-").toLowerCase().includes(def.key.replace("dev", "dev-"))
-    );
+    // 1. Trust the saved channel ID from config if the channel still exists
+    let ch = null;
+    if (savedChannels[def.key]) {
+      ch = guild.channels.cache.get(savedChannels[def.key]) ?? null;
+    }
 
+    // 2. Fall back: scan the category for a channel whose name matches the def name
+    if (!ch) {
+      const defSlug = def.name.replace(/[^\w-]/g, "").toLowerCase();
+      ch = guild.channels.cache.find(
+        c => c.parentId === category.id && c.isTextBased() &&
+             c.name.replace(/[^\w-]/g, "").toLowerCase() === defSlug
+      ) ?? null;
+    }
+
+    // 3. Create only if still not found
     if (!ch) {
       ch = await guild.channels.create({
         name:                 def.name,
