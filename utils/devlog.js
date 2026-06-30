@@ -4,12 +4,13 @@ const { read } = require("./jsondb");
 const CONFIG_PATH = "./data/config.json";
 
 const CHANNEL_COLORS = {
-  devLogs:    0x5865f2,
-  devErrors:  0xed4245,
-  devTesting: 0x57f287,
-  devData:    0xfee75c,
-  devControl: 0xeb459e,
-  devTools:   0x9b59b6,
+  devLogs:     0x5865f2,
+  devErrors:   0xed4245,
+  devTesting:  0x57f287,
+  devData:     0xfee75c,
+  devControl:  0xeb459e,
+  devTools:    0x9b59b6,
+  devAiErrors: 0xff6b35,
 };
 
 async function devLog(client, channelKey, { title, description = null, fields = [], color = null }) {

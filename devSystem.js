@@ -30,12 +30,13 @@ function setConfig(updates) { write(CONFIG_PATH, { ...getConfig(), ...updates })
 // ─── Dev channel definitions ──────────────────────────────────────────────────
 
 const DEV_CHANNEL_DEFS = [
-  { key: "devControl", name: "🤖・dev-control", topic: "Developer control panel — bot commands and restarts" },
-  { key: "devTools",   name: "🛠️・dev-tools",   topic: "Developer utilities and diagnostics" },
-  { key: "devLogs",    name: "📜・dev-logs",     topic: "All dev command usage and action logs" },
-  { key: "devErrors",  name: "⚠️・dev-errors",   topic: "Runtime errors and bot error alerts" },
-  { key: "devTesting", name: "🧪・dev-testing",  topic: "Test commands and application flow simulations" },
-  { key: "devData",    name: "🗄️・dev-data",     topic: "Data backups, restores, and resets" },
+  { key: "devControl",  name: "🤖・dev-control",  topic: "Developer control panel — bot commands and restarts" },
+  { key: "devTools",    name: "🛠️・dev-tools",    topic: "Developer utilities and diagnostics" },
+  { key: "devLogs",     name: "📜・dev-logs",      topic: "All dev command usage and action logs" },
+  { key: "devErrors",   name: "⚠️・dev-errors",    topic: "Runtime errors and bot error alerts" },
+  { key: "devTesting",  name: "🧪・dev-testing",   topic: "Test commands and application flow simulations" },
+  { key: "devData",     name: "🗄️・dev-data",      topic: "Data backups, restores, and resets" },
+  { key: "devAiErrors", name: "🧠・ai-errors",     topic: "Hugging Face API errors from AI detection scans" },
 ];
 
 // ─── Dev channel setup ────────────────────────────────────────────────────────

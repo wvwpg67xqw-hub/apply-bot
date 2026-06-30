@@ -810,6 +810,18 @@ async function runApplication(client, user, sourceGuild, roleType) {
   } catch (err) {
     log.warn("DETECTAI", "Auto-scan failed for application", err.message);
     await thread.send({ content: `⚠️ AI detection scan failed: ${err.message}` });
+    devLog(client, "devAiErrors", {
+      title: "🧠 Hugging Face API Error — Auto-scan",
+      fields: [
+        { name: "Error",       value: `\`\`\`${err.message}\`\`\``,                       inline: false },
+        { name: "Applicant",   value: `<@${user.id}> (${user.tag})`,                       inline: true  },
+        { name: "Server",      value: sourceGuild.name,                                    inline: true  },
+        { name: "Role Type",   value: roleType,                                            inline: true  },
+        { name: "App ID",      value: appId ?? "unknown",                                  inline: true  },
+        { name: "Thread",      value: `<#${thread.id}>`,                                   inline: true  },
+        { name: "Tip",         value: "Set `HF_TOKEN` in Secrets if hitting rate limits.", inline: false },
+      ],
+    }).catch(() => {});
   }
 
   // Notify the parent channel without pinging — ping stays in the thread
@@ -1044,6 +1056,15 @@ client.on("interactionCreate", async (interaction) => {
         return interaction.editReply({ embeds: [embed] });
       } catch (err) {
         log.error("DETECTAI", "Hugging Face API error", err.message);
+        devLog(client, "devAiErrors", {
+          title: "🧠 Hugging Face API Error — /detectai",
+          fields: [
+            { name: "Error",   value: `\`\`\`${err.message}\`\`\``,                       inline: false },
+            { name: "Used by", value: `<@${interaction.user.id}> (${interaction.user.tag})`, inline: true },
+            { name: "Server",  value: guild?.name ?? "unknown",                            inline: true  },
+            { name: "Tip",     value: "Set `HF_TOKEN` in Secrets if hitting rate limits.", inline: false },
+          ],
+        }).catch(() => {});
         return interaction.editReply(`❌ Detection failed: ${err.message}\n\nMake sure \`HF_TOKEN\` is set as an environment variable if you are hitting rate limits.`);
       }
     }
