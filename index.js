@@ -524,6 +524,12 @@ const commands = [
     )
     .addRoleOption((o) =>
       o.setName("partnership-team").setDescription("Team role also given to accepted Partnership applicants (e.g. @Staff Team).").setRequired(true)
+    )
+    .addRoleOption((o) =>
+      o.setName("growth-role").setDescription("Role given to accepted Growth Manager applicants (e.g. @Growth Manager).").setRequired(false)
+    )
+    .addRoleOption((o) =>
+      o.setName("growth-team").setDescription("Team role also given to accepted Growth Manager applicants (e.g. @Staff Team).").setRequired(false)
     ),
 
   new SlashCommandBuilder()
@@ -1133,6 +1139,8 @@ client.on("interactionCreate", async (interaction) => {
         const modTeam         = interaction.options.getRole("mod-team");
         const partnerRole     = interaction.options.getRole("partnership-role");
         const partnerTeam     = interaction.options.getRole("partnership-team");
+        const growthRole      = interaction.options.getRole("growth-role");
+        const growthTeam      = interaction.options.getRole("growth-team");
 
         const missing = [
           !hrRole      && "hr-role",
@@ -1150,31 +1158,41 @@ client.on("interactionCreate", async (interaction) => {
           });
         }
 
-        setGuildConfig(guild.id, {
+        const configUpdate = {
           hrRoleId:              hrRole.id,
           hrTeamRoleId:          hrTeam.id,
           modRoleId:             modRole.id,
           modTeamRoleId:         modTeam.id,
           partnershipRoleId:     partnerRole.id,
           partnershipTeamRoleId: partnerTeam.id,
-        });
+        };
+        if (growthRole) configUpdate.growthRoleId     = growthRole.id;
+        if (growthTeam) configUpdate.growthTeamRoleId = growthTeam.id;
+        setGuildConfig(guild.id, configUpdate);
+
+        const embedFields = [
+          { name: "👥 HR Role",                  value: `${hrRole}`,      inline: true },
+          { name: "👥 HR Team Role",              value: `${hrTeam}`,      inline: true },
+          { name: "\u200b",                       value: "\u200b",          inline: true },
+          { name: "🔨 Mod Role",                  value: `${modRole}`,     inline: true },
+          { name: "🔨 Mod Team Role",              value: `${modTeam}`,     inline: true },
+          { name: "\u200b",                       value: "\u200b",          inline: true },
+          { name: "🤝 Partnership Manager Role",  value: `${partnerRole}`, inline: true },
+          { name: "🤝 Partnership Team Role",     value: `${partnerTeam}`, inline: true },
+          { name: "\u200b",                       value: "\u200b",          inline: true },
+        ];
+        if (growthRole) embedFields.push(
+          { name: "📈 Growth Manager Role",  value: `${growthRole}`,                    inline: true },
+          { name: "📈 Growth Team Role",     value: growthTeam ? `${growthTeam}` : "—", inline: true },
+          { name: "\u200b",                  value: "\u200b",                            inline: true },
+        );
 
         return interaction.reply({
           embeds: [
             new EmbedBuilder()
               .setTitle(`✅ Accept roles configured for ${guild.name}`)
               .setColor(0x57f287)
-              .addFields(
-                { name: "👥 HR Role",                  value: `${hrRole}`,      inline: true },
-                { name: "👥 HR Team Role",              value: `${hrTeam}`,      inline: true },
-                { name: "\u200b",                       value: "\u200b",          inline: true },
-                { name: "🔨 Mod Role",                  value: `${modRole}`,     inline: true },
-                { name: "🔨 Mod Team Role",              value: `${modTeam}`,     inline: true },
-                { name: "\u200b",                       value: "\u200b",          inline: true },
-                { name: "🤝 Partnership Manager Role",  value: `${partnerRole}`, inline: true },
-                { name: "🤝 Partnership Team Role",     value: `${partnerTeam}`, inline: true },
-                { name: "\u200b",                       value: "\u200b",          inline: true },
-              )
+              .addFields(...embedFields)
               .setFooter({ text: "These roles will be granted when an application is accepted." }),
           ],
           ephemeral: true,
@@ -1497,6 +1515,7 @@ client.on("interactionCreate", async (interaction) => {
               hr:          ["hrRoleId",          "hrTeamRoleId"],
               mod:         ["modRoleId",          "modTeamRoleId"],
               partnership: ["partnershipRoleId",  "partnershipTeamRoleId"],
+              growth:      ["growthRoleId",       "growthTeamRoleId"],
             };
             const [specificKey, teamKey] = typeRoleKeys[roleType] ?? [];
             for (const [key, label] of [[specificKey, "role"], [teamKey, "team role"]]) {
