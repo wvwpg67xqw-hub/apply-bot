@@ -64,6 +64,7 @@ async function sendBlacklistLog(clientRef, { applicantId, applicantTag, roleLabe
 // ─── Role type metadata ───────────────────────────────────────────────────────
 
 const SA_GUILD_ID = "1487744336908124190";
+const GROWTH_GUILD_IDS = new Set([SA_GUILD_ID, "1487798778986758257"]);
 
 const ROLE_TYPES = {
   hr:          { label: "HR",                  emoji: "👥", color: 0x5865f2 },
@@ -678,7 +679,7 @@ function buildPanelRow(guildId) {
       .setStyle(ButtonStyle.Success)
       .setEmoji("🤝"),
   ];
-  if (guildId === SA_GUILD_ID) {
+  if (GROWTH_GUILD_IDS.has(guildId)) {
     base.push(
       new ButtonBuilder()
         .setCustomId("panel_apply_growth")
@@ -1335,7 +1336,7 @@ client.on("interactionCreate", async (interaction) => {
         { name: "🔨 Mod",                   value: "Keep the server safe and enforce the rules.",      inline: true },
         { name: "🤝 Partnership Manager",   value: "Build relationships with other Discord servers.",  inline: true },
       );
-      if (guild.id === SA_GUILD_ID) {
+      if (GROWTH_GUILD_IDS.has(guild.id)) {
         panelEmbed.addFields(
           { name: "📈 Growth Manager", value: "Drive server growth, partnerships, and activity.", inline: true }
         );
@@ -1369,7 +1370,7 @@ client.on("interactionCreate", async (interaction) => {
       const roleType = panelMap[interaction.customId];
       const meta     = ROLE_TYPES[roleType];
 
-      if (roleType === "growth" && guild.id !== SA_GUILD_ID) {
+      if (roleType === "growth" && !GROWTH_GUILD_IDS.has(guild.id)) {
         return interaction.reply({ content: "❌ The Growth Manager application is not available in this server.", ephemeral: true });
       }
 
