@@ -1,22 +1,26 @@
 const { HfInference } = require("@huggingface/inference");
+const { read } = require("./jsondb");
 
 const MODEL = "Hello-SimpleAI/chatgpt-detector-roberta";
+const CONFIG_PATH = "./data/config.json";
+
+function getHfToken() {
+  if (process.env.HF_TOKEN) return process.env.HF_TOKEN;
+  try {
+    const cfg = read(CONFIG_PATH);
+    return cfg?.hfToken || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 async function detectAI(text) {
-  const token = process.env.HF_TOKEN;
-  const hf = new HfInference(token || undefined);
+  const hf = new HfInference(getHfToken());
 
   const result = await hf.textClassification({
     model: MODEL,
     inputs: text,
   });
-
-  const aiLabel = result.find(
-    (r) => r.label === "ChatGPT" || r.label.toLowerCase().includes("ai") || r.label.toLowerCase().includes("fake")
-  );
-  const humanLabel = result.find(
-    (r) => r.label === "Human" || r.label.toLowerCase().includes("human") || r.label.toLowerCase().includes("real")
-  );
 
   const sorted = [...result].sort((a, b) => b.score - a.score);
   const top = sorted[0];

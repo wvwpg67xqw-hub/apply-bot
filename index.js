@@ -63,10 +63,13 @@ async function sendBlacklistLog(clientRef, { applicantId, applicantTag, roleLabe
 
 // ─── Role type metadata ───────────────────────────────────────────────────────
 
+const SA_GUILD_ID = "1487744336908124190";
+
 const ROLE_TYPES = {
   hr:          { label: "HR",                  emoji: "👥", color: 0x5865f2 },
   mod:         { label: "Moderator",           emoji: "🔨", color: 0xed4245 },
   partnership: { label: "Partnership Manager", emoji: "🤝", color: 0xfee75c },
+  growth:      { label: "Growth Manager",      emoji: "📈", color: 0x57f287 },
 };
 
 // ─── Per-server config map ────────────────────────────────────────────────────
@@ -618,6 +621,16 @@ const commands = [
         .setDescription("The text to analyse (min 50 characters recommended).")
         .setRequired(true)
     ),
+
+  new SlashCommandBuilder()
+    .setName("sethftoken")
+    .setDescription("(Admin) Set the Hugging Face API token used for AI detection.")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    .addStringOption((o) =>
+      o.setName("token")
+        .setDescription("Your Hugging Face API token (hf_...).")
+        .setRequired(true)
+    ),
 ].map((c) => c.toJSON());
 
 const allCommands = [...commands, ...DEV_COMMANDS];
@@ -647,8 +660,8 @@ function buildReviewRow(disabled = false) {
   );
 }
 
-function buildPanelRow() {
-  return new ActionRowBuilder().addComponents(
+function buildPanelRow(guildId) {
+  const base = [
     new ButtonBuilder()
       .setCustomId("panel_apply_hr")
       .setLabel("HR")
@@ -663,8 +676,18 @@ function buildPanelRow() {
       .setCustomId("panel_apply_partnership")
       .setLabel("Partnership Manager")
       .setStyle(ButtonStyle.Success)
-      .setEmoji("🤝")
-  );
+      .setEmoji("🤝"),
+  ];
+  if (guildId === SA_GUILD_ID) {
+    base.push(
+      new ButtonBuilder()
+        .setCustomId("panel_apply_growth")
+        .setLabel("Growth Manager")
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji("📈")
+    );
+  }
+  return new ActionRowBuilder().addComponents(...base);
 }
 
 // ─── Shared application flow ──────────────────────────────────────────────────
@@ -959,6 +982,21 @@ client.on("interactionCreate", async (interaction) => {
         .setColor(0x57f287)
         .setTimestamp();
       return interaction.editReply({ embeds: [embed] });
+    }
+
+    // /sethftoken
+    if (commandName === "sethftoken") {
+      if (interaction.guild?.id !== SA_GUILD_ID) {
+        return interaction.reply({ content: "❌ This command can only be used in the Shadow Advertising server.", ephemeral: true });
+      }
+      const token = interaction.options.getString("token");
+      if (!token.startsWith("hf_")) {
+        return interaction.reply({ content: "❌ That doesn't look like a valid Hugging Face token — it should start with `hf_`.", ephemeral: true });
+      }
+      const cfg = getConfig();
+      setConfig({ ...cfg, hfToken: token });
+      log.info("SETHFTOKEN", `HF token updated by ${interaction.user.tag}`);
+      return interaction.reply({ content: "✅ Hugging Face API token saved. AI detection will use it from now on.", ephemeral: true });
     }
 
     // /detectai
@@ -1290,16 +1328,21 @@ client.on("interactionCreate", async (interaction) => {
           `> ⏱️ You have **2 minutes** to answer each question.\n` +
           `> 📬 You'll be notified once a decision has been made.`
         )
-        .setColor(0x5865f2)
-        .addFields(
-          { name: "👥 HR",                   value: "Help manage and recruit our staff team.",           inline: true },
-          { name: "🔨 Mod",                   value: "Keep the server safe and enforce the rules.",      inline: true },
-          { name: "🤝 Partnership Manager",   value: "Build relationships with other Discord servers.",  inline: true },
-        )
-        .setTimestamp()
-        .setFooter({ text: guild.name });
+        .setColor(0x5865f2);
 
-      await target.send({ embeds: [panelEmbed], components: [buildPanelRow()] });
+      panelEmbed.addFields(
+        { name: "👥 HR",                   value: "Help manage and recruit our staff team.",           inline: true },
+        { name: "🔨 Mod",                   value: "Keep the server safe and enforce the rules.",      inline: true },
+        { name: "🤝 Partnership Manager",   value: "Build relationships with other Discord servers.",  inline: true },
+      );
+      if (guild.id === SA_GUILD_ID) {
+        panelEmbed.addFields(
+          { name: "📈 Growth Manager", value: "Drive server growth, partnerships, and activity.", inline: true }
+        );
+      }
+      panelEmbed.setTimestamp().setFooter({ text: guild.name });
+
+      await target.send({ embeds: [panelEmbed], components: [buildPanelRow(guild.id)] });
       return interaction.reply({ content: `✅ Panel sent to ${target}.`, ephemeral: true });
     }
 
@@ -1315,14 +1358,20 @@ client.on("interactionCreate", async (interaction) => {
       panel_apply_hr:          "hr",
       panel_apply_mod:         "mod",
       panel_apply_partnership: "partnership",
+      panel_apply_growth:      "growth",
       apply_pick_hr:           "hr",
       apply_pick_mod:          "mod",
       apply_pick_partnership:  "partnership",
+      apply_pick_growth:       "growth",
     };
 
     if (panelMap[interaction.customId]) {
       const roleType = panelMap[interaction.customId];
       const meta     = ROLE_TYPES[roleType];
+
+      if (roleType === "growth" && guild.id !== SA_GUILD_ID) {
+        return interaction.reply({ content: "❌ The Growth Manager application is not available in this server.", ephemeral: true });
+      }
 
       if (isBlacklisted(guild.id, user.id)) {
         return interaction.reply({ content: "🚫 You are blacklisted from submitting applications.", ephemeral: true });

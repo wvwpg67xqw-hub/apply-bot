@@ -42,5 +42,16 @@
     "What qualities do you think make a good Partnership Manager?",
     "Why should we choose you over others for this role?",
     "Is there anything else you'd like to add?"
+  ],
+  "growth": [
+    "What is your Discord username and ID?",
+    "How old are you?",
+    "What timezone are you in, and what is your typical availability?",
+    "Have you held any Growth, Partnerships, Advertising, Management, or Leadership positions before? If so, briefly describe your experience.",
+    "Why do you want to become a Growth Manager, and what makes you a good fit for this role?",
+    "What do you believe are the main responsibilities of a Growth Manager in an advertising server, and how would you fulfil them?",
+    "If our server's growth started slowing down, what steps would you take to help increase activity, partnerships, and new members?",
+    "How would you work with other departments (such as HR, Staff Management, Server Building, or Events) to support the server's overall growth?",
+    "Is there anything else you'd like to add?"
   ]
 }
