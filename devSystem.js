@@ -80,6 +80,9 @@ async function setupDevCategory(guild, devRole) {
   const devChannelIds = {};
   const lines = [];
 
+  // Force-fetch all channels so the cache is complete before scanning
+  await guild.channels.fetch();
+
   for (const def of DEV_CHANNEL_DEFS) {
     const defSlug = def.name.replace(/[^\w-]/g, "").toLowerCase();
 

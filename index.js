@@ -99,6 +99,7 @@ const SERVER_CONFIG_MAP = [
   },
   {
     match:          "shadow advertising",
+    guildIds:       ["1487798778986758257"],
     channelName:    "shadow-advertising-apps",
     channelNames:   ["shadow-advertising-apps", "shadow-advertising", "sa-apps"],
     roleName:       "Shadow Advertising Apps",
@@ -106,7 +107,11 @@ const SERVER_CONFIG_MAP = [
   },
 ];
 
-function getServerConfig(guildName) {
+function getServerConfig(guildName, guildId) {
+  if (guildId) {
+    const byId = SERVER_CONFIG_MAP.find((e) => e.guildIds?.includes(guildId));
+    if (byId) return byId;
+  }
   const lower = guildName.toLowerCase();
   return SERVER_CONFIG_MAP.find((e) => lower.includes(e.match)) || null;
 }
@@ -391,7 +396,7 @@ async function autoSetupStaffChannels(client, staffGuild) {
 
     for (const guild of client.guilds.cache.values()) {
       if (guild.id === staffGuild.id) continue;
-      const gcfg = getServerConfig(guild.name);
+      const gcfg = getServerConfig(guild.name, guild.id);
       if (gcfg?.match === entry.match) {
         setGuildConfig(guild.id, { routeChannelId: ch.id });
         lines.push(`   ↳ Linked **${guild.name}** → <#${ch.id}>`);
@@ -406,7 +411,7 @@ async function autoLinkNewGuild(client, guild) {
   const cfg = getConfig();
   if (!cfg.staffGuildId) return;
 
-  const entry = getServerConfig(guild.name);
+  const entry = getServerConfig(guild.name, guild.id);
   if (!entry) return;
 
   const staffGuild = client.guilds.cache.get(cfg.staffGuildId);
@@ -423,8 +428,8 @@ async function autoLinkNewGuild(client, guild) {
 
 // ─── Role & channel resolution ────────────────────────────────────────────────
 
-function resolveHRRole(sourceGuildName, destGuild, savedHrRoleId) {
-  const entry = getServerConfig(sourceGuildName);
+function resolveHRRole(sourceGuildName, destGuild, savedHrRoleId, sourceGuildId) {
+  const entry = getServerConfig(sourceGuildName, sourceGuildId);
   if (entry) {
     const role = destGuild.roles.cache.find((r) => r.name === entry.roleName);
     if (role) return role;
@@ -446,7 +451,7 @@ async function resolveAppChannel(client, sourceGuild, guildConfig) {
     const ch = sourceGuild.channels.cache.get(guildConfig.applicationChannel);
     if (ch) return { channel: ch, guild: sourceGuild };
   }
-  const entry = getServerConfig(sourceGuild.name);
+  const entry = getServerConfig(sourceGuild.name, sourceGuild.id);
   if (entry) {
     for (const name of entry.channelNames) {
       const ch = sourceGuild.channels.cache.find((c) => c.name === name && c.isTextBased());
@@ -783,7 +788,7 @@ async function runApplication(client, user, sourceGuild, roleType) {
     return { ok: false, reason: "no_thread" };
   }
 
-  const hrRole   = resolveHRRole(sourceGuild.name, destGuild, guildConfig?.hrRole);
+  const hrRole   = resolveHRRole(sourceGuild.name, destGuild, guildConfig?.hrRole, sourceGuild.id);
   const pingLine = hrRole ? `<@&${hrRole.id}> — new **${meta.label}** application to review.\n` : "";
 
   await thread.send({
@@ -906,7 +911,7 @@ client.once("ready", async () => {
         if (guild.id === staffGuild.id) continue;
         const guildCfg = getGuild(guild.id);
         if (guildCfg?.routeChannelId) continue;
-        const entry = getServerConfig(guild.name);
+        const entry = getServerConfig(guild.name, guild.id);
         if (!entry) continue;
         const ch = staffGuild.channels.cache.find(
           (c) => entry.channelNames.includes(c.name) && c.isTextBased()
@@ -1096,7 +1101,7 @@ client.on("interactionCreate", async (interaction) => {
       const guildConfig = getGuild(guild.id);
       const resolved    = await resolveAppChannel(client, guild, guildConfig);
       const hrRole      = resolved
-        ? resolveHRRole(guild.name, resolved.guild, guildConfig?.hrRole)
+        ? resolveHRRole(guild.name, resolved.guild, guildConfig?.hrRole, guild.id)
         : null;
 
       let routeDesc = "❌ Not configured — run `/setstaffserver` in the staff server";
@@ -1464,7 +1469,8 @@ client.on("interactionCreate", async (interaction) => {
         reviewer_member = interaction.member;
       }
 
-      const serverEntry     = getServerConfig(sourceGuildName);
+      const sourceGuild2    = client.guilds.cache.find((g) => g.name === sourceGuildName);
+      const serverEntry     = getServerConfig(sourceGuildName, sourceGuild2?.id);
       const reviewerRoleId  = serverEntry?.reviewerRoleId;
       const hasAccess       = reviewerRoleId
         ? reviewer_member.roles.cache.has(reviewerRoleId)
