@@ -81,6 +81,8 @@ async function setupDevCategory(guild, devRole) {
   const lines = [];
 
   for (const def of DEV_CHANNEL_DEFS) {
+    const defSlug = def.name.replace(/[^\w-]/g, "").toLowerCase();
+
     // 1. Trust the saved channel ID from config if the channel still exists
     let ch = null;
     if (savedChannels[def.key]) {
@@ -89,7 +91,6 @@ async function setupDevCategory(guild, devRole) {
 
     // 2. Fall back: scan the category for a channel whose name matches the def name
     if (!ch) {
-      const defSlug = def.name.replace(/[^\w-]/g, "").toLowerCase();
       ch = guild.channels.cache.find(
         c => c.parentId === category.id && c.isTextBased() &&
              c.name.replace(/[^\w-]/g, "").toLowerCase() === defSlug
@@ -110,6 +111,21 @@ async function setupDevCategory(guild, devRole) {
       lines.push(`⏭️ Already exists ${ch}`);
     }
     devChannelIds[def.key] = ch.id;
+
+    // 4. Delete any duplicates in the same category (same slug, different ID)
+    const duplicates = guild.channels.cache.filter(
+      c => c.parentId === category.id && c.isTextBased() &&
+           c.name.replace(/[^\w-]/g, "").toLowerCase() === defSlug &&
+           c.id !== ch.id
+    );
+    for (const dup of duplicates.values()) {
+      try {
+        await dup.delete("Dev setup — removing duplicate channel");
+        lines.push(`🗑️ Deleted duplicate ${dup.name} (${dup.id})`);
+      } catch (err) {
+        lines.push(`⚠️ Could not delete duplicate ${dup.name}: ${err.message}`);
+      }
+    }
   }
 
   setConfig({
