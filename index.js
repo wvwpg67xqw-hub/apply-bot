@@ -667,34 +667,48 @@ function buildReviewRow(disabled = false) {
   );
 }
 
-function buildPanelRow(guildId) {
-  const base = [
-    new ButtonBuilder()
-      .setCustomId("panel_apply_hr")
-      .setLabel("HR")
-      .setStyle(ButtonStyle.Primary)
-      .setEmoji("👥"),
-    new ButtonBuilder()
-      .setCustomId("panel_apply_mod")
-      .setLabel("Mod")
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji("🔨"),
-    new ButtonBuilder()
-      .setCustomId("panel_apply_partnership")
-      .setLabel("Partnership Manager")
-      .setStyle(ButtonStyle.Success)
-      .setEmoji("🤝"),
-  ];
-  if (GROWTH_GUILD_IDS.has(guildId)) {
-    base.push(
+const PANEL_ROLE_DEFS = [
+  { roleType: "hr",          customId: "panel_apply_hr",          label: "HR",                   style: ButtonStyle.Primary,   emoji: "👥", fieldName: "👥 HR",                   fieldValue: "Help manage and recruit our staff team.",          growthOnly: false },
+  { roleType: "mod",         customId: "panel_apply_mod",         label: "Mod",                  style: ButtonStyle.Danger,    emoji: "🔨", fieldName: "🔨 Mod",                   fieldValue: "Keep the server safe and enforce the rules.",      growthOnly: false },
+  { roleType: "partnership", customId: "panel_apply_partnership", label: "Partnership Manager",  style: ButtonStyle.Success,   emoji: "🤝", fieldName: "🤝 Partnership Manager",   fieldValue: "Build relationships with other Discord servers.",  growthOnly: false },
+  { roleType: "growth",      customId: "panel_apply_growth",      label: "Growth Manager",       style: ButtonStyle.Secondary, emoji: "📈", fieldName: "📈 Growth Manager",        fieldValue: "Drive server growth, partnerships, and activity.", growthOnly: true  },
+];
+
+function buildPanelRow(guildId, disabledRoles = []) {
+  const buttons = PANEL_ROLE_DEFS
+    .filter(d => !d.growthOnly || GROWTH_GUILD_IDS.has(guildId))
+    .filter(d => !disabledRoles.includes(d.roleType))
+    .map(d =>
       new ButtonBuilder()
-        .setCustomId("panel_apply_growth")
-        .setLabel("Growth Manager")
-        .setStyle(ButtonStyle.Secondary)
-        .setEmoji("📈")
+        .setCustomId(d.customId)
+        .setLabel(d.label)
+        .setStyle(d.style)
+        .setEmoji(d.emoji)
     );
+  return new ActionRowBuilder().addComponents(...buttons);
+}
+
+function buildPanelEmbed(guild, disabledRoles = []) {
+  const embed = new EmbedBuilder()
+    .setTitle("📋 Staff Applications")
+    .setDescription(
+      `Want to join the team at **${guild.name}**?\n\n` +
+      `Choose the role you'd like to apply for below.\n` +
+      `The questions will be sent to your **DMs** — make sure they are open!\n\n` +
+      `> ⏱️ You have **2 minutes** to answer each question.\n` +
+      `> 📬 You'll be notified once a decision has been made.`
+    )
+    .setColor(0x5865f2);
+
+  const activeFields = PANEL_ROLE_DEFS
+    .filter(d => !d.growthOnly || GROWTH_GUILD_IDS.has(guild.id))
+    .filter(d => !disabledRoles.includes(d.roleType));
+
+  for (const d of activeFields) {
+    embed.addFields({ name: d.fieldName, value: d.fieldValue, inline: true });
   }
-  return new ActionRowBuilder().addComponents(...base);
+
+  return embed.setTimestamp().setFooter({ text: guild.name });
 }
 
 // ─── Shared application flow ──────────────────────────────────────────────────
@@ -958,7 +972,15 @@ client.on("interactionCreate", async (interaction) => {
 
     // Route dev commands first
     try {
-      const handled = await handleDevCommand(interaction, client, { allCommandsJson: allCommands });
+      const handled = await handleDevCommand(interaction, client, {
+        allCommandsJson: allCommands,
+        getGuild,
+        setGuildConfig,
+        buildPanelEmbed,
+        buildPanelRow,
+        GROWTH_GUILD_IDS,
+        PANEL_ROLE_DEFS,
+      });
       if (handled) {
         devLog(client, "devLogs", {
           title: `🛠️ Dev Command: /${commandName}`,
@@ -1358,31 +1380,12 @@ client.on("interactionCreate", async (interaction) => {
 
     // /panel
     if (commandName === "panel") {
-      const target = interaction.options.getChannel("channel") ?? interaction.channel;
-      const panelEmbed = new EmbedBuilder()
-        .setTitle("📋 Staff Applications")
-        .setDescription(
-          `Want to join the team at **${guild.name}**?\n\n` +
-          `Choose the role you'd like to apply for below.\n` +
-          `The questions will be sent to your **DMs** — make sure they are open!\n\n` +
-          `> ⏱️ You have **2 minutes** to answer each question.\n` +
-          `> 📬 You'll be notified once a decision has been made.`
-        )
-        .setColor(0x5865f2);
-
-      panelEmbed.addFields(
-        { name: "👥 HR",                   value: "Help manage and recruit our staff team.",           inline: true },
-        { name: "🔨 Mod",                   value: "Keep the server safe and enforce the rules.",      inline: true },
-        { name: "🤝 Partnership Manager",   value: "Build relationships with other Discord servers.",  inline: true },
-      );
-      if (GROWTH_GUILD_IDS.has(guild.id)) {
-        panelEmbed.addFields(
-          { name: "📈 Growth Manager", value: "Drive server growth, partnerships, and activity.", inline: true }
-        );
-      }
-      panelEmbed.setTimestamp().setFooter({ text: guild.name });
-
-      await target.send({ embeds: [panelEmbed], components: [buildPanelRow(guild.id)] });
+      const target      = interaction.options.getChannel("channel") ?? interaction.channel;
+      const guildCfg    = getGuild(guild.id);
+      const disabled    = guildCfg?.disabledRoles ?? [];
+      const panelEmbed  = buildPanelEmbed(guild, disabled);
+      const sent        = await target.send({ embeds: [panelEmbed], components: [buildPanelRow(guild.id, disabled)] });
+      setGuildConfig(guild.id, { panelChannelId: target.id, panelMessageId: sent.id });
       return interaction.reply({ content: `✅ Panel sent to ${target}.`, ephemeral: true });
     }
 

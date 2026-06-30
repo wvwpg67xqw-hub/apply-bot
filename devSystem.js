@@ -280,6 +280,42 @@ const DEV_COMMANDS = [
     .addStringOption(o =>
       o.setName("id").setDescription("Application ID (e.g. APP-ABC123).").setRequired(true)
     ),
+
+  new SlashCommandBuilder()
+    .setName("setroles")
+    .setDescription("(Dev) Open or close a role type on a server's panel, and edit the existing panel message.")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    .addStringOption(o =>
+      o.setName("guild-id").setDescription("ID of the guild whose panel to update.").setRequired(true)
+    )
+    .addStringOption(o =>
+      o.setName("role")
+        .setDescription("Which role type to change.")
+        .setRequired(true)
+        .addChoices(
+          { name: "👥 HR",                   value: "hr"          },
+          { name: "🔨 Mod",                   value: "mod"         },
+          { name: "🤝 Partnership Manager",   value: "partnership" },
+          { name: "📈 Growth Manager",        value: "growth"      },
+        )
+    )
+    .addStringOption(o =>
+      o.setName("status")
+        .setDescription("Open (visible & clickable) or Closed (hidden from panel).")
+        .setRequired(true)
+        .addChoices(
+          { name: "✅ Open",   value: "open"   },
+          { name: "🔒 Closed", value: "closed" },
+        )
+    ),
+
+  new SlashCommandBuilder()
+    .setName("test-panel")
+    .setDescription("(Dev) Show the current role open/closed status for a guild's panel.")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    .addStringOption(o =>
+      o.setName("guild-id").setDescription("ID of the guild to inspect (leave blank for all guilds).").setRequired(false)
+    ),
 ].map(c => c.toJSON());
 
 // ─── Command handler ──────────────────────────────────────────────────────────
@@ -677,6 +713,125 @@ async function handleDevCommand(interaction, client, helpers) {
       ],
       color: 0xed4245,
     });
+    return true;
+  }
+
+  // ── /setroles ─────────────────────────────────────────────────────────────────
+  if (commandName === "setroles") {
+    await interaction.deferReply({ ephemeral: true });
+    const { getGuild, setGuildConfig, buildPanelEmbed, buildPanelRow, GROWTH_GUILD_IDS } = helpers;
+
+    const targetGuildId = interaction.options.getString("guild-id").trim();
+    const roleType      = interaction.options.getString("role");
+    const status        = interaction.options.getString("status");
+    const closing       = status === "closed";
+
+    const targetGuild = client.guilds.cache.get(targetGuildId);
+    if (!targetGuild) {
+      await interaction.editReply(`❌ Guild \`${targetGuildId}\` not found in bot's cache. Make sure the bot is in that server.`);
+      return true;
+    }
+
+    if (roleType === "growth" && !GROWTH_GUILD_IDS.has(targetGuildId)) {
+      await interaction.editReply(`❌ Growth Manager is not enabled for that server. Add its ID to \`GROWTH_GUILD_IDS\` in the code first.`);
+      return true;
+    }
+
+    const guildCfg      = getGuild(targetGuildId) || {};
+    const disabledRoles = Array.isArray(guildCfg.disabledRoles) ? [...guildCfg.disabledRoles] : [];
+
+    if (closing && !disabledRoles.includes(roleType)) {
+      disabledRoles.push(roleType);
+    } else if (!closing) {
+      const idx = disabledRoles.indexOf(roleType);
+      if (idx !== -1) disabledRoles.splice(idx, 1);
+    }
+
+    setGuildConfig(targetGuildId, { disabledRoles });
+
+    // Try to edit the existing panel message
+    let panelEdited = false;
+    const panelChannelId = guildCfg.panelChannelId;
+    const panelMessageId = guildCfg.panelMessageId;
+
+    if (panelChannelId && panelMessageId) {
+      try {
+        const ch  = await client.channels.fetch(panelChannelId);
+        const msg = await ch.messages.fetch(panelMessageId);
+        await msg.edit({
+          embeds:     [buildPanelEmbed(targetGuild, disabledRoles)],
+          components: [buildPanelRow(targetGuildId, disabledRoles)],
+        });
+        panelEdited = true;
+      } catch (err) {
+        log.warn("SETROLES", "Could not edit panel message", err.message);
+      }
+    }
+
+    const roleLabel = { hr: "👥 HR", mod: "🔨 Mod", partnership: "🤝 Partnership Manager", growth: "📈 Growth Manager" }[roleType];
+    const nowStatus = closing ? "🔒 Closed" : "✅ Open";
+    const lines = [
+      `**Guild:** ${targetGuild.name}`,
+      `**Role:** ${roleLabel}`,
+      `**Status:** ${nowStatus}`,
+      panelEdited
+        ? "✅ Existing panel message updated."
+        : "⚠️ No saved panel message found — run `/panel` in that server to post a fresh one.",
+    ];
+
+    await interaction.editReply(lines.join("\n"));
+    await devLog(client, "devLogs", {
+      title: "🎛️ Panel Role Updated",
+      fields: [
+        { name: "By",     value: `<@${user.id}> (${user.tag})`, inline: true },
+        { name: "Guild",  value: targetGuild.name,               inline: true },
+        { name: "Role",   value: roleLabel,                      inline: true },
+        { name: "Status", value: nowStatus,                      inline: true },
+        { name: "Panel",  value: panelEdited ? "Edited ✅" : "Not found ⚠️", inline: true },
+      ],
+    });
+    return true;
+  }
+
+  // ── /test-panel ───────────────────────────────────────────────────────────────
+  if (commandName === "test-panel") {
+    const { getGuild, PANEL_ROLE_DEFS, GROWTH_GUILD_IDS } = helpers;
+    const targetGuildId = interaction.options.getString("guild-id")?.trim();
+
+    const guildsToCheck = targetGuildId
+      ? [client.guilds.cache.get(targetGuildId)].filter(Boolean)
+      : [...client.guilds.cache.values()];
+
+    if (!guildsToCheck.length) {
+      await interaction.reply({ content: `❌ Guild \`${targetGuildId}\` not found.`, ephemeral: true });
+      return true;
+    }
+
+    const lines = [];
+    for (const g of guildsToCheck) {
+      const cfg      = getGuild(g.id) || {};
+      const disabled = Array.isArray(cfg.disabledRoles) ? cfg.disabledRoles : [];
+      const hasPanelMsg = !!(cfg.panelChannelId && cfg.panelMessageId);
+
+      const roleLines = PANEL_ROLE_DEFS
+        .filter(d => !d.growthOnly || GROWTH_GUILD_IDS.has(g.id))
+        .map(d => `${disabled.includes(d.roleType) ? "🔒" : "✅"} ${d.fieldName}`)
+        .join("  |  ");
+
+      lines.push(
+        `**${g.name}** (\`${g.id}\`)\n` +
+        `${roleLines}\n` +
+        `Panel msg: ${hasPanelMsg ? `<#${cfg.panelChannelId}> — \`${cfg.panelMessageId}\`` : "⚠️ not tracked (re-run /panel)"}`
+      );
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle("🧪 Panel Role Status")
+      .setColor(0x5865f2)
+      .setDescription(lines.join("\n\n"))
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
     return true;
   }
 
