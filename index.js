@@ -748,6 +748,40 @@ async function runApplication(client, user, sourceGuild, roleType) {
     components: [buildReviewRow()],
   });
 
+  // ── AI detection scan ──────────────────────────────────────────────────────
+  try {
+    const combinedText = answers.join("\n\n");
+    if (combinedText.trim().length >= 20) {
+      const aiResult = await detectAI(combinedText);
+      const bar = (pct) => {
+        const filled = Math.round(pct / 10);
+        return "█".repeat(filled) + "░".repeat(10 - filled);
+      };
+      const aiColor   = aiResult.isAI ? 0xed4245 : 0x57f287;
+      const aiIcon    = aiResult.isAI ? "🤖" : "✅";
+      const aiVerdict = aiResult.isAI
+        ? `**Likely AI-generated** (${aiResult.confidence}% confidence)`
+        : `**Likely human-written** (${aiResult.confidence}% confidence)`;
+      const scoreLines = aiResult.allScores
+        .map((s) => `\`${s.label.padEnd(10)}\` ${bar(Math.round(s.score * 100))} ${Math.round(s.score * 100)}%`)
+        .join("\n");
+      const aiEmbed = new EmbedBuilder()
+        .setTitle(`${aiIcon} AI Detection Scan`)
+        .setColor(aiColor)
+        .setDescription("Automatically scanned all answers for AI-generated content.")
+        .addFields(
+          { name: "Verdict", value: aiVerdict,   inline: false },
+          { name: "Scores",  value: scoreLines,  inline: false },
+        )
+        .setFooter({ text: "Model: Hello-SimpleAI/chatgpt-detector-roberta • Powered by Hugging Face" })
+        .setTimestamp();
+      await thread.send({ embeds: [aiEmbed] });
+    }
+  } catch (err) {
+    log.warn("DETECTAI", "Auto-scan failed for application", err.message);
+    await thread.send({ content: `⚠️ AI detection scan failed: ${err.message}` });
+  }
+
   // Notify the parent channel without pinging — ping stays in the thread
   try {
     await appChannel.send({
