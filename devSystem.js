@@ -320,6 +320,16 @@ const DEV_COMMANDS = [
     .addStringOption(o =>
       o.setName("guild-id").setDescription("ID of the guild to inspect (leave blank for all guilds).").setRequired(false)
     ),
+
+  new SlashCommandBuilder()
+    .setName("cleanupdev")
+    .setDescription("(Dev) Find and delete orphaned dev channels/categories not in the current dev setup.")
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+    .addBooleanOption(o =>
+      o.setName("dry-run")
+        .setDescription("Preview what would be deleted without actually deleting anything. (default: true)")
+        .setRequired(false)
+    ),
 ].map(c => c.toJSON());
 
 // ─── Command handler ──────────────────────────────────────────────────────────
@@ -836,6 +846,75 @@ async function handleDevCommand(interaction, client, helpers) {
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
+    return true;
+  }
+
+  // ── /cleanupdev ───────────────────────────────────────────────────────────────
+  if (commandName === "cleanupdev") {
+    await interaction.deferReply({ ephemeral: true });
+
+    const dryRun = interaction.options.getBoolean("dry-run") ?? true;
+
+    // Fetch all channels so the cache is complete
+    await guild.channels.fetch();
+
+    const cfg           = getConfig();
+    const knownCatId    = cfg.devCategoryId || null;
+    const knownChanIds  = new Set(Object.values(cfg.devChannels || {}));
+    const defSlugs      = new Set(
+      DEV_CHANNEL_DEFS.map(d => d.name.replace(/[^\w-]/g, "").toLowerCase())
+    );
+
+    const toDelete = [];
+
+    // 1. Orphaned dev categories — any GuildCategory whose name looks like a dev category
+    //    but is NOT the currently saved one
+    for (const ch of guild.channels.cache.values()) {
+      if (ch.type !== ChannelType.GuildCategory) continue;
+      const isDevCat = ch.name.toLowerCase().includes("dev");
+      if (isDevCat && ch.id !== knownCatId) {
+        toDelete.push({ ch, reason: "orphaned dev category" });
+      }
+    }
+
+    // 2. Orphaned dev channels — text channels whose slug matches a DEV_CHANNEL_DEF
+    //    but are NOT in the current dev category and NOT the currently saved channel ID
+    for (const ch of guild.channels.cache.values()) {
+      if (!ch.isTextBased()) continue;
+      const slug = ch.name.replace(/[^\w-]/g, "").toLowerCase();
+      if (!defSlugs.has(slug)) continue;
+      if (ch.parentId === knownCatId) continue;   // in the right category — keep
+      if (knownChanIds.has(ch.id)) continue;      // explicitly saved — keep
+      toDelete.push({ ch, reason: `orphaned dev channel (slug: ${slug})` });
+    }
+
+    if (!toDelete.length) {
+      await interaction.editReply("✅ No orphaned dev channels or categories found — everything looks clean.");
+      return true;
+    }
+
+    const lines = [];
+    for (const { ch, reason } of toDelete) {
+      if (dryRun) {
+        lines.push(`🔍 **[DRY RUN]** Would delete **${ch.name}** (\`${ch.id}\`) — ${reason}`);
+      } else {
+        try {
+          await ch.delete("cleanupdev — orphaned dev channel/category");
+          lines.push(`🗑️ Deleted **${ch.name}** (\`${ch.id}\`) — ${reason}`);
+        } catch (err) {
+          lines.push(`⚠️ Could not delete **${ch.name}** (\`${ch.id}\`): ${err.message}`);
+        }
+      }
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(dryRun ? "🔍 Cleanupdev — Dry Run Preview" : "🗑️ Cleanupdev — Done")
+      .setColor(dryRun ? 0xfaa61a : 0xed4245)
+      .setDescription(lines.join("\n"))
+      .setFooter({ text: dryRun ? "Run with dry-run: False to actually delete these." : `${toDelete.length} item(s) removed.` })
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [embed] });
     return true;
   }
 
