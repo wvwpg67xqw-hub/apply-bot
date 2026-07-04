@@ -36,7 +36,6 @@ const DEV_CHANNEL_DEFS = [
   { key: "devErrors",   name: "⚠️・dev-errors",    topic: "Runtime errors and bot error alerts" },
   { key: "devTesting",  name: "🧪・dev-testing",   topic: "Test commands and application flow simulations" },
   { key: "devData",     name: "🗄️・dev-data",      topic: "Data backups, restores, and resets" },
-  { key: "devAiErrors", name: "🧠・ai-errors",     topic: "Hugging Face API errors from AI detection scans" },
 ];
 
 // ─── Dev channel setup ────────────────────────────────────────────────────────
