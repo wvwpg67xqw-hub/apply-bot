@@ -26,7 +26,7 @@ const CONFIG_PATH           = "./data/config.json";
 const APPS_PATH             = "./data/applications.json";
 const BLACKLIST_LOG_CHANNEL  = "1492165517279232090";
 const PENDING_JOINS_PATH     = "./data/pending_joins.json";
-const JOIN_ALERT_ROLE_ID     = "1487771497316749312";
+const JOIN_ALERT_ROLE_ID     = "1521652278694514843";
 const JOIN_ALERT_CHANNEL_ID  = "1519706422735274195";
 const DEFAULT_JOIN_TIMEOUT   = 48 * 60 * 60 * 1000;
 
