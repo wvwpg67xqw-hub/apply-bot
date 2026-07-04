@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require("discord.js");
+const log = require("../utils/logger");
 const { addToBlacklist } = require("../lib/db");
 const { applyStaffBlacklistRole, sendBlacklistLog } = require("../lib/blacklistRole");
 const { buildReviewRow } = require("../lib/panel");
@@ -10,31 +11,39 @@ module.exports = {
   async execute(interaction) {
     const client = interaction.client;
     const ctx    = await buildReviewContext(interaction);
+    if (ctx.deferFailed) return;
 
     if (!ctx.ok) {
       if (ctx.noApplicant) {
-        return interaction.reply({ content: "❌ Could not determine the applicant from this message.", ephemeral: true });
+        return interaction.editReply({ content: "❌ Could not determine the applicant from this message." });
       }
       const roleTag = ctx.reviewerRoleId ? `<@&${ctx.reviewerRoleId}>` : "the correct reviewer role";
-      return interaction.reply({
+      return interaction.editReply({
         content: `❌ You need the ${roleTag} role to manage applications from **${ctx.sourceGuildName}**.`,
-        ephemeral: true,
       });
     }
 
-    const { sourceGuildName, meta, appId, msg, applicantId, reviewer, applicantUser, postResult } = ctx;
+    const { sourceGuild, sourceGuildName, meta, appId, msg, applicantId, reviewer, applicantUser, postResult } = ctx;
 
-    const sourceGuild = client.guilds.cache.find((g) => g.name === sourceGuildName);
     if (sourceGuild) {
-      addToBlacklist(sourceGuild.id, applicantId);
-      await applyStaffBlacklistRole(sourceGuild, applicantId);
+      try {
+        addToBlacklist(sourceGuild.id, applicantId);
+        await applyStaffBlacklistRole(sourceGuild, applicantId);
+      } catch (err) {
+        log.error("BLACKLIST", "Failed to blacklist applicant", err.message);
+      }
     }
 
-    const updated = EmbedBuilder.from(msg.embeds[0])
-      .setColor(0x000000)
-      .setTitle(`🚫 ${meta.label} Application Denied & Blacklisted — ${sourceGuildName}`);
-    await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
-    await interaction.reply({ content: `🚫 **${meta.label}** application **denied & user blacklisted** by ${reviewer}.` });
+    try {
+      const updated = EmbedBuilder.from(msg.embeds[0])
+        .setColor(0x000000)
+        .setTitle(`🚫 ${meta.label} Application Denied & Blacklisted — ${sourceGuildName}`);
+      await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
+    } catch (err) {
+      log.error("BLACKLIST", "Failed to update application message", err.message);
+    }
+
+    await interaction.editReply({ content: `🚫 **${meta.label}** application **denied & user blacklisted** by ${reviewer}.` });
     await lockThread(interaction);
 
     const resultEmbed = new EmbedBuilder()
@@ -56,7 +65,7 @@ module.exports = {
       sourceGuildName: sourceGuildName,
       moderator:       reviewer,
       appId:           appId,
-    });
+    }).catch(() => {});
 
     try {
       await applicantUser?.send(

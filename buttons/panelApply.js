@@ -26,25 +26,31 @@ module.exports = {
     const roleType = PANEL_MAP[interaction.customId];
     const meta     = ROLE_TYPES[roleType];
 
+    // Ack immediately — resolving the application channel below can be slow
+    // and must never risk Discord showing "This interaction failed".
+    try {
+      await interaction.deferReply({ ephemeral: true });
+    } catch {
+      return;
+    }
+
     if (roleType === "growth" && !GROWTH_GUILD_IDS.has(guild.id)) {
-      return interaction.reply({ content: "❌ The Growth Manager application is not available in this server.", ephemeral: true });
+      return interaction.editReply({ content: "❌ The Growth Manager application is not available in this server." });
     }
 
     if (isBlacklisted(guild.id, user.id)) {
-      return interaction.reply({ content: "🚫 You are blacklisted from submitting applications.", ephemeral: true });
+      return interaction.editReply({ content: "🚫 You are blacklisted from submitting applications." });
     }
 
     const resolved = await resolveAppChannel(client, guild, getGuild(guild.id));
     if (!resolved) {
-      return interaction.reply({
+      return interaction.editReply({
         content: "❌ No application channel configured. Ask an admin to run `/setstaffserver` in the staff server.",
-        ephemeral: true,
       });
     }
 
-    await interaction.reply({
+    await interaction.editReply({
       content: `${meta.emoji} Check your DMs — your **${meta.label}** application has started!`,
-      ephemeral: true,
     });
 
     const result = await runApplication(client, user, guild, roleType);

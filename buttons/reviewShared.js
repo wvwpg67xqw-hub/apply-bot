@@ -1,13 +1,26 @@
 const log = require("../utils/logger");
 const { ROLE_TYPES, getServerConfig } = require("../lib/serverConfig");
+const { isBlacklisted } = require("../lib/db");
 
-// Shared preamble for the accept / deny / blacklist review buttons: parses the
+// Shared preamble for the accept / deny / blacklist review buttons: acks the
+// interaction immediately (so Discord never shows "This interaction failed"
+// no matter how long the rest of the work takes), then parses the
 // application embed footer, checks reviewer permissions, and resolves the
 // applicant. Each button file only needs to implement its own specific action.
 
 async function buildReviewContext(interaction) {
   const client     = interaction.client;
   const destGuild  = interaction.guild;
+
+  // Ack right away — everything below this point can be slow (member
+  // fetches, guild lookups) and must never block Discord's 3-second
+  // acknowledgement window.
+  try {
+    await interaction.deferReply();
+  } catch (err) {
+    log.error("REVIEW", "Failed to defer reply — interaction likely expired", err.message);
+    return { ok: false, deferFailed: true };
+  }
 
   const footer          = interaction.message.embeds[0]?.footer?.text ?? "";
   const fromMatch       = footer.match(/From:\s*([^•]+)/);
@@ -29,9 +42,9 @@ async function buildReviewContext(interaction) {
     reviewer_member = interaction.member;
   }
 
-  const sourceGuild2   = client.guilds.cache.find((g) => g.name === sourceGuildName);
-  const serverEntry    = getServerConfig(sourceGuildName, sourceGuild2?.id);
-  const reviewerRoleId = serverEntry?.reviewerRoleId;
+  const sourceGuild     = client.guilds.cache.find((g) => g.name === sourceGuildName);
+  const serverEntry     = getServerConfig(sourceGuildName, sourceGuild?.id);
+  const reviewerRoleId  = serverEntry?.reviewerRoleId;
   const hasAccess       = reviewerRoleId
     ? reviewer_member.roles.cache.has(reviewerRoleId)
     : false;
@@ -60,6 +73,8 @@ async function buildReviewContext(interaction) {
   let applicantUser  = null;
   try { applicantUser = await client.users.fetch(applicantId); } catch {}
 
+  const applicantBlacklisted = sourceGuild ? isBlacklisted(sourceGuild.id, applicantId) : false;
+
   // Posts a result card to the parent channel (visible outside the thread)
   const postResult = async (resultEmbed) => {
     const parentChannel = interaction.channel?.parent;
@@ -70,8 +85,8 @@ async function buildReviewContext(interaction) {
 
   return {
     ok: true,
-    destGuild, sourceGuildName, roleType, appId, meta,
-    msg, applicantId, reviewer, applicantUser, postResult,
+    destGuild, sourceGuild, sourceGuildName, roleType, appId, meta,
+    msg, applicantId, reviewer, applicantUser, postResult, applicantBlacklisted,
   };
 }
 

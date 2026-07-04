@@ -11,25 +11,30 @@ module.exports = {
   async execute(interaction) {
     const client = interaction.client;
     const ctx    = await buildReviewContext(interaction);
+    if (ctx.deferFailed) return;
 
     if (!ctx.ok) {
       if (ctx.noApplicant) {
-        return interaction.reply({ content: "❌ Could not determine the applicant from this message.", ephemeral: true });
+        return interaction.editReply({ content: "❌ Could not determine the applicant from this message." });
       }
       const roleTag = ctx.reviewerRoleId ? `<@&${ctx.reviewerRoleId}>` : "the correct reviewer role";
-      return interaction.reply({
+      return interaction.editReply({
         content: `❌ You need the ${roleTag} role to manage applications from **${ctx.sourceGuildName}**.`,
-        ephemeral: true,
       });
     }
 
     const { sourceGuildName, roleType, meta, msg, applicantId, reviewer, applicantUser, postResult } = ctx;
 
-    const updated = EmbedBuilder.from(msg.embeds[0])
-      .setColor(0x57f287)
-      .setTitle(`✅ ${meta.label} Application Accepted — ${sourceGuildName}`);
-    await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
-    await interaction.reply({ content: `✅ **${meta.label}** application **accepted** by ${reviewer}.` });
+    try {
+      const updated = EmbedBuilder.from(msg.embeds[0])
+        .setColor(0x57f287)
+        .setTitle(`✅ ${meta.label} Application Accepted — ${sourceGuildName}`);
+      await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
+    } catch (err) {
+      log.error("ACCEPT", "Failed to update application message", err.message);
+    }
+
+    await interaction.editReply({ content: `✅ **${meta.label}** application **accepted** by ${reviewer}.` });
     await lockThread(interaction);
 
     // Grant team + normal roles in the source server
@@ -80,11 +85,15 @@ module.exports = {
     }
 
     // Report role grant outcome in the thread
-    if (rolesGranted.length) {
-      await interaction.channel.send(`✅ Roles granted in **${sourceGuildName}**: ${rolesGranted.join(", ")}`);
-    }
-    if (roleErrors.length) {
-      await interaction.channel.send(`⚠️ Could not grant some roles in **${sourceGuildName}**: ${roleErrors.join(", ")} — check bot permissions and role IDs.`);
+    try {
+      if (rolesGranted.length) {
+        await interaction.channel.send(`✅ Roles granted in **${sourceGuildName}**: ${rolesGranted.join(", ")}`);
+      }
+      if (roleErrors.length) {
+        await interaction.channel.send(`⚠️ Could not grant some roles in **${sourceGuildName}**: ${roleErrors.join(", ")} — check bot permissions and role IDs.`);
+      }
+    } catch (err) {
+      log.warn("ACCEPT", "Could not send role-grant summary", err.message);
     }
 
     const resultEmbed = new EmbedBuilder()

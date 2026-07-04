@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require("discord.js");
+const log = require("../utils/logger");
 const { buildReviewRow } = require("../lib/panel");
 const { buildReviewContext, lockThread } = require("./reviewShared");
 
@@ -7,25 +8,30 @@ module.exports = {
 
   async execute(interaction) {
     const ctx = await buildReviewContext(interaction);
+    if (ctx.deferFailed) return;
 
     if (!ctx.ok) {
       if (ctx.noApplicant) {
-        return interaction.reply({ content: "❌ Could not determine the applicant from this message.", ephemeral: true });
+        return interaction.editReply({ content: "❌ Could not determine the applicant from this message." });
       }
       const roleTag = ctx.reviewerRoleId ? `<@&${ctx.reviewerRoleId}>` : "the correct reviewer role";
-      return interaction.reply({
+      return interaction.editReply({
         content: `❌ You need the ${roleTag} role to manage applications from **${ctx.sourceGuildName}**.`,
-        ephemeral: true,
       });
     }
 
     const { sourceGuildName, meta, msg, applicantId, reviewer, applicantUser, postResult } = ctx;
 
-    const updated = EmbedBuilder.from(msg.embeds[0])
-      .setColor(0xed4245)
-      .setTitle(`❌ ${meta.label} Application Denied — ${sourceGuildName}`);
-    await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
-    await interaction.reply({ content: `❌ **${meta.label}** application **denied** by ${reviewer}.` });
+    try {
+      const updated = EmbedBuilder.from(msg.embeds[0])
+        .setColor(0xed4245)
+        .setTitle(`❌ ${meta.label} Application Denied — ${sourceGuildName}`);
+      await msg.edit({ embeds: [updated], components: [buildReviewRow(true)] });
+    } catch (err) {
+      log.error("DENY", "Failed to update application message", err.message);
+    }
+
+    await interaction.editReply({ content: `❌ **${meta.label}** application **denied** by ${reviewer}.` });
     await lockThread(interaction);
 
     const resultEmbed = new EmbedBuilder()
