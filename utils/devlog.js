@@ -10,6 +10,7 @@ const CHANNEL_COLORS = {
   devData:     0xfee75c,
   devControl:  0xeb459e,
   devTools:    0x9b59b6,
+  devAiErrors: 0xff6b35,
 };
 
 async function devLog(client, channelKey, { title, description = null, fields = [], color = null }) {
