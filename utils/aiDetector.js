@@ -1,3 +1,4 @@
+const https  = require("https");
 const { read } = require("./jsondb");
 
 const MODEL       = "Hello-SimpleAI/chatgpt-detector-roberta";
@@ -19,33 +20,58 @@ function sleep(ms) {
   return new Promise((res) => setTimeout(res, ms));
 }
 
-async function fetchWithTimeout(url, options, timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } catch (err) {
-    if (err.name === "AbortError") throw new Error(`Request timed out after ${timeoutMs / 1000}s`);
-    throw err;
-  } finally {
-    clearTimeout(timer);
-  }
+function httpsPost(url, headers, body) {
+  return new Promise((resolve, reject) => {
+    const parsed  = new URL(url);
+    const payload = JSON.stringify(body);
+
+    const req = https.request(
+      {
+        hostname: parsed.hostname,
+        path:     parsed.pathname + parsed.search,
+        method:   "POST",
+        headers:  {
+          ...headers,
+          "Content-Type":   "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+        },
+        timeout: TIMEOUT_MS,
+      },
+      (res) => {
+        let raw = "";
+        res.on("data", (chunk) => (raw += chunk));
+        res.on("end", () => resolve({ status: res.statusCode, body: raw }));
+      }
+    );
+
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error(`Request timed out after ${TIMEOUT_MS / 1000}s`));
+    });
+    req.on("error", reject);
+    req.write(payload);
+    req.end();
+  });
 }
 
 async function detectAI(text) {
   const token   = getHfToken();
-  const headers = { "Content-Type": "application/json" };
+  const headers = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
+  // x-wait-for-model tells HF to block until the model is warm (up to ~60s)
+  // instead of immediately returning a 503
+  headers["x-wait-for-model"] = "true";
+
   const url  = `https://api-inference.huggingface.co/models/${MODEL}`;
-  const body = JSON.stringify({ inputs: text });
+  const body = { inputs: text, options: { wait_for_model: true } };
 
   let lastErr;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     let res;
     try {
-      res = await fetchWithTimeout(url, { method: "POST", headers, body }, TIMEOUT_MS);
+      res = await httpsPost(url, headers, body);
     } catch (err) {
       lastErr = err;
       if (attempt < MAX_RETRIES) {
@@ -55,27 +81,32 @@ async function detectAI(text) {
       throw new Error(`Network error after ${MAX_RETRIES} attempts: ${err.message}`);
     }
 
-    // Model is loading — HF tells us how long to wait
+    // Model still loading (shouldn't happen with wait_for_model, but handle anyway)
     if (res.status === 503) {
       let waitMs = 10_000;
       try {
-        const body503 = await res.json();
-        if (body503?.estimated_time) waitMs = Math.min(body503.estimated_time * 1000, 60_000);
-      } catch { /* ignore parse failure */ }
+        const parsed503 = JSON.parse(res.body);
+        if (parsed503?.estimated_time) waitMs = Math.min(parsed503.estimated_time * 1000, 60_000);
+      } catch { /* ignore */ }
 
       if (attempt < MAX_RETRIES) {
         await sleep(waitMs);
         continue;
       }
-      throw new Error(`Model still loading after ${MAX_RETRIES} attempts (waited ${waitMs / 1000}s each)`);
+      throw new Error(`Model still loading after ${MAX_RETRIES} attempts`);
     }
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "(unreadable)");
-      throw new Error(`Hugging Face API error ${res.status}: ${errText}`);
+    if (res.status !== 200) {
+      throw new Error(`Hugging Face API error ${res.status}: ${res.body}`);
     }
 
-    const data   = await res.json();
+    let data;
+    try {
+      data = JSON.parse(res.body);
+    } catch {
+      throw new Error(`Invalid JSON from Hugging Face: ${res.body.slice(0, 200)}`);
+    }
+
     const result = Array.isArray(data[0]) ? data[0] : data;
     const sorted = [...result].sort((a, b) => b.score - a.score);
     const top    = sorted[0];
@@ -85,9 +116,12 @@ async function detectAI(text) {
       top.label.toLowerCase().includes("ai") ||
       top.label.toLowerCase().includes("fake");
 
-    const confidence = Math.round(top.score * 100);
-
-    return { isAI, confidence, label: top.label, allScores: result };
+    return {
+      isAI,
+      confidence: Math.round(top.score * 100),
+      label:      top.label,
+      allScores:  result,
+    };
   }
 
   throw lastErr || new Error("detectAI failed after max retries");
