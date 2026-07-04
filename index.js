@@ -82,6 +82,7 @@ const SERVER_CONFIG_MAP = [
     channelNames:   ["plain-promotions-apps", "plain-promotions", "pp-apps"],
     roleName:       "Plain Promotions Apps",
     reviewerRoleId: "1488370139286995135",
+    blacklistRoleId: "1522845818359644200",
   },
   {
     match:          "advertising legends",
@@ -89,6 +90,7 @@ const SERVER_CONFIG_MAP = [
     channelNames:   ["advertising-legends-apps", "advertising-legends", "al-apps"],
     roleName:       "Advertising Legends Apps",
     reviewerRoleId: "1488375799819276358",
+    blacklistRoleId: "1522846270371135680",
   },
   {
     match:          "devil advertising",
@@ -96,6 +98,7 @@ const SERVER_CONFIG_MAP = [
     channelNames:   ["devil-advertising-apps", "devil-advertising", "da-apps"],
     roleName:       "Devil Advertising Apps",
     reviewerRoleId: "1488370171293733000",
+    blacklistRoleId: "1522846473283174430",
   },
   {
     match:          "shadow advertising",
@@ -104,6 +107,7 @@ const SERVER_CONFIG_MAP = [
     channelNames:   ["shadow-advertising-apps", "shadow-advertising", "sa-apps"],
     roleName:       "Shadow Advertising Apps",
     reviewerRoleId: "1488369842225680465",
+    blacklistRoleId: "1522846909968945162",
   },
 ];
 
@@ -188,6 +192,35 @@ function removeFromBlacklistAllGuilds(userId) {
   }
   if (totalRemoved > 0) write(GUILDS_PATH, guilds);
   return totalRemoved;
+}
+
+// ─── Staff blacklist role (per-server) ────────────────────────────────────────
+// Each advertising server has its own "blacklist" role. If a member holds that
+// role in a given server, they are treated as blacklisted there — regardless of
+// whether they're in the guilds.json blacklist list. When a user is manually
+// blacklisted (via /blacklist or the review panel's Blacklist button), the bot
+// automatically grants them that server's blacklist role.
+
+async function memberHasStaffBlacklistRole(guild, userId) {
+  if (!guild) return false;
+  const entry = getServerConfig(guild.name, guild.id);
+  if (!entry?.blacklistRoleId) return false;
+  let member = null;
+  try { member = await guild.members.fetch(userId); } catch { return false; }
+  return member.roles.cache.has(entry.blacklistRoleId);
+}
+
+async function applyStaffBlacklistRole(guild, userId) {
+  if (!guild) return;
+  const entry = getServerConfig(guild.name, guild.id);
+  if (!entry?.blacklistRoleId) return;
+  try {
+    const member = await guild.members.fetch(userId);
+    await member.roles.add(entry.blacklistRoleId);
+    log.info("BLACKLIST", `Granted blacklist role ${entry.blacklistRoleId} to ${userId} in [${guild.name}]`);
+  } catch (err) {
+    log.warn("BLACKLIST", `Could not grant blacklist role to ${userId} in [${guild.name}]`, err.message);
+  }
 }
 
 // ─── Staff invite — cached, auto-rotating every 30 min ───────────────────────
@@ -744,6 +777,7 @@ async function runApplication(client, user, sourceGuild, roleType) {
   const guildConfig = getGuild(sourceGuild.id);
 
   if (isBlacklisted(sourceGuild.id, user.id)) return { ok: false, reason: "blacklisted" };
+  if (await memberHasStaffBlacklistRole(sourceGuild, user.id)) return { ok: false, reason: "blacklisted" };
 
   const resolved = await resolveAppChannel(client, sourceGuild, guildConfig);
   if (!resolved) return { ok: false, reason: "no_channel" };
@@ -1288,6 +1322,7 @@ client.on("interactionCreate", async (interaction) => {
       }
 
       addToBlacklist(guild.id, target.id, expiresAt);
+      await applyStaffBlacklistRole(guild, target.id);
       await sendBlacklistLog(client, {
         applicantId:     target.id,
         applicantTag:    target.tag,
@@ -1699,7 +1734,10 @@ client.on("interactionCreate", async (interaction) => {
 
       else if (interaction.customId === "app_blacklist") {
         const sourceGuild = client.guilds.cache.find((g) => g.name === sourceGuildName);
-        if (sourceGuild) addToBlacklist(sourceGuild.id, applicantId);
+        if (sourceGuild) {
+          addToBlacklist(sourceGuild.id, applicantId);
+          await applyStaffBlacklistRole(sourceGuild, applicantId);
+        }
 
         const updated = EmbedBuilder.from(msg.embeds[0])
           .setColor(0x000000)
