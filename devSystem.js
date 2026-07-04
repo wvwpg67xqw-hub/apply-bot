@@ -59,11 +59,15 @@ async function setupDevCategory(guild, devRole) {
     });
   }
 
+  // Force-fetch ALL channels first so the cache is complete before any lookup
+  await guild.channels.fetch();
+
   // Find existing dev category or create one
   const botName = guild.members.me?.displayName || "Bot";
+  const savedCfg = getConfig();
   let category = guild.channels.cache.find(
     c => c.type === ChannelType.GuildCategory &&
-         (c.name.toLowerCase().includes("dev") || c.id === getConfig().devCategoryId)
+         (c.id === savedCfg.devCategoryId || c.name.toLowerCase().includes("dev"))
   );
 
   if (!category) {
@@ -76,12 +80,9 @@ async function setupDevCategory(guild, devRole) {
     await category.permissionOverwrites.set(baseOverwrites);
   }
 
-  const savedChannels = getConfig().devChannels || {};
+  const savedChannels = savedCfg.devChannels || {};
   const devChannelIds = {};
   const lines = [];
-
-  // Force-fetch all channels so the cache is complete before scanning
-  await guild.channels.fetch();
 
   for (const def of DEV_CHANNEL_DEFS) {
     const defSlug = def.name.replace(/[^\w-]/g, "").toLowerCase();
