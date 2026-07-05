@@ -1,66 +1,0 @@
-v22.22.3
-:/home/container$ if [ ! -d .git ]; then git clone https://github.com/wvwpg67xqw-hub/apply-bot .; fi; if [[ "${AUTO_UPDATE}" == "1" ]]; then git pull; fi; if [ -f /home/container/package.json ]; then npm install; fi; npm install -g ts-node typescript || true; if [ -f /home/container/index.ts ]; then ts-node --esm index.ts; elif [ -f /home/container/src/index.ts ]; then ts-node --esm src/index.ts; else node index.js; fi # Added by FeatherPanel (Server Startup)
-remote: Enumerating objects: 16, done.[K
-remote: Counting objects:   6% (1/16)[Kremote: Counting objects:  12% (2/16)[Kremote: Counting objects:  18% (3/16)[Kremote: Counting objects:  25% (4/16)[Kremote: Counting objects:  31% (5/16)[Kremote: Counting objects:  37% (6/16)[Kremote: Counting objects:  43% (7/16)[Kremote: Counting objects:  50% (8/16)[Kremote: Counting objects:  56% (9/16)[Kremote: Counting objects:  62% (10/16)[Kremote: Counting objects:  68% (11/16)[Kremote: Counting objects:  75% (12/16)[Kremote: Counting objects:  81% (13/16)[Kremote: Counting objects:  87% (14/16)[Kremote: Counting objects:  93% (15/16)[Kremote: Counting objects: 100% (16/16)[Kremote: Counting objects: 100% (16/16), done.[K
-remote: Compressing objects:  50% (1/2)[Kremote: Compressing objects: 100% (2/2)[Kremote: Compressing objects: 100% (2/2), done.[K
-remote: Total 10 (delta 8), reused 10 (delta 8), pack-reused 0 (from 0)[K
-Unpacking objects:  10% (1/10)Unpacking objects:  20% (2/10)Unpacking objects:  30% (3/10)Unpacking objects:  40% (4/10)Unpacking objects:  50% (5/10)Unpacking objects:  60% (6/10)Unpacking objects:  70% (7/10)Unpacking objects:  80% (8/10)Unpacking objects:  90% (9/10)Unpacking objects: 100% (10/10)Unpacking objects: 100% (10/10), 1.38 KiB | 156.00 KiB/s, done.
-From https://github.com/wvwpg67xqw-hub/apply-bot
-   2479b45..237dcdd  main       -> origin/main
-Updating 2479b45..237dcdd
-Fast-forward
- data/activity.json |  2 [32m+[m[31m-[m
- data/status.json   |  4 [32m+[m[31m---[m
- utils/presence.js  | 27 [32m++++++++[m[31m-------------------[m
- 3 files changed, 10 insertions(+), 23 deletions(-)
-\[1G[0K|[1G[0K/[1G[0K-[1G[0K\[1G[0K|[1G[0K
-up to date, audited 93 packages in 2s
-|[1G[0K
-|[1G[0K31 packages are looking for funding
-|[1G[0K  run `npm fund` for details
-|[1G[0K
-found [32m[1m0[22m[39m vulnerabilities
-|[1G[0K\[1G[0K|[1G[0K/[1G[0K-[1G[0K\[1G[0K|[1G[0K/[1G[0K-[1G[0K\[1G[0K|[1G[0K/[1G[0K-[1G[0K[1mnpm[22m [31merror[39m [94mcode[39m EROFS
--[1G[0K[1mnpm[22m [31merror[39m [94msyscall[39m rename
--[1G[0K[1mnpm[22m [31merror[39m [94mpath[39m /usr/local/lib/node_modules/ts-node
--[1G[0K[1mnpm[22m [31merror[39m [94mdest[39m /usr/local/lib/node_modules/.ts-node-6zHekdFC
--[1G[0K[1mnpm[22m [31merror[39m [94merrno[39m [33m-30[39m
--[1G[0K[1mnpm[22m [31merror[39m [94mrofs[39m EROFS: read-only file system, rename '/usr/local/lib/node_modules/ts-node' -> '/usr/local/lib/node_modules/.ts-node-6zHekdFC'
--[1G[0K[1mnpm[22m [31merror[39m [94mrofs[39m Often virtualized file systems, or other file systems that don't support symlinks, give this error.
--[1G[0K[1mnpm[22m [31merror[39m A complete log of this run can be found in: /home/container/.npm/_logs/2026-06-04T19_11_08_287Z-debug-0.log
--[1G[0K[32m[2026-06-04T19:11:16.114Z] [INFO] [BOT][0m Logged in as Eclipse Applications#0433 (1511590386311762022)
-[32m[2026-06-04T19:11:16.115Z] [INFO] [BOT][0m In 6 guild(s)
-[32m[2026-06-04T19:11:16.115Z] [INFO] [COMMANDS][0m Registering global slash commands...
-(node:50) DeprecationWarning: The ready event has been renamed to clientReady to distinguish it from the gateway READY event and will only emit under that name in v15. Please use clientReady instead.
-(Use `node --trace-deprecation ...` to show where the warning was created)
-[32m[2026-06-04T19:11:16.287Z] [INFO] [COMMANDS][0m Registered 12 slash commands globally
-[1G[0J[36mbot>[0m [6G
-[1m[36mBot console ready.[0m Type [32mhelp[0m for available commands.
-
-
-[1m[36m━━━ Bot Console Commands ━━━[0m
-
-  [1mMessaging[0m
-  [32msay <channelId> <message>[0m         — Send a message to a channel
-  [32mdm <userId> <message>[0m             — DM a user
-  [32mreply <channelId> <msgId> <msg>[0m  — Reply to a specific message
-
-  [1mInfo[0m
-  [32mguilds[0m                            — List all servers the bot is in
-  [32mchannels <guildId>[0m               — List text channels in a server
-  [32muser <userId>[0m                    — Look up a user
-
-  [1mModeration[0m
-  [32mblacklist <guildId> <userId> [dur][0m — Blacklist a user (e.g. 7d, permanent)
-  [32munblacklist <guildId> <userId>[0m   — Remove a user from the blacklist
-  [32misblacklisted <guildId> <userId>[0m — Check if a user is blacklisted
-
-  [1mOther[0m
-  [32mhelp[0m                              — Show this list
-  [32mexit[0m                              — Shut down the bot
-
-[90mTip: channel/user/guild IDs can be found by right-clicking in Discord with Developer Mode on.[0m
-
-[36m[WEB][0m Dashboard running → http://localhost:25580
-[32m[2026-06-04T19:11:16.622Z] [INFO] [INVITE][0m Generated invite tKP6DKk → #join-leave-logs (1 use, 30 min)
-[35m[PRESENCE][0m Status: online | WATCHING for staff
