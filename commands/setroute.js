@@ -27,7 +27,7 @@ module.exports = {
     if (!destChannel.isTextBased()) {
       return interaction.reply({ content: "❌ That channel is not a text channel.", ephemeral: true });
     }
-    setGuildConfig(guild.id, { routeChannelId: channelId });
+    await setGuildConfig(guild.id, { routeChannelId: channelId });
     return interaction.reply({
       content: `✅ Applications from **${guild.name}** will now go to <#${channelId}> in **${destChannel.guild?.name ?? "the staff server"}**.`,
       ephemeral: true,

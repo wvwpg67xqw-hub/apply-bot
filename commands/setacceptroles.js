@@ -70,7 +70,7 @@ module.exports = {
       };
       if (growthRole) configUpdate.growthRoleId     = growthRole.id;
       if (growthTeam) configUpdate.growthTeamRoleId = growthTeam.id;
-      setGuildConfig(guild.id, configUpdate);
+      await setGuildConfig(guild.id, configUpdate);
 
       const embedFields = [
         { name: "👥 HR Role",                  value: `${hrRole}`,      inline: true },

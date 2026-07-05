@@ -12,7 +12,7 @@ module.exports = {
 
   async execute(interaction) {
     const rawId  = interaction.options.getString("id").trim();
-    const appRec = getAppById(rawId);
+    const appRec = await getAppById(rawId);
     if (!appRec) {
       return interaction.reply({
         content: `❌ No application found with ID \`${rawId.toUpperCase()}\`. IDs look like \`APP-ABC123\`.`,

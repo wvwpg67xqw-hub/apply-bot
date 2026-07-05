@@ -175,7 +175,7 @@ function startCLI(client, helpers) {
             break;
           }
           const expiresAt = parseDuration(durStr ?? "permanent");
-          addToBlacklist(guildId, userId, expiresAt);
+          await addToBlacklist(guildId, userId, expiresAt);
           const display = expiresAt
             ? `until ${new Date(expiresAt).toUTCString()}`
             : "permanently";
@@ -190,7 +190,7 @@ function startCLI(client, helpers) {
             console.log(`${tag("ERR", RED)} Usage: unblacklist <guildId> <userId>`);
             break;
           }
-          const removed = removeFromBlacklist(guildId, userId);
+          const removed = await removeFromBlacklist(guildId, userId);
           console.log(removed
             ? `${tag("OK", GREEN)} Removed ${userId} from blacklist in guild ${guildId}.`
             : `${tag("WARN", YELLOW)} That user was not blacklisted.`
@@ -205,7 +205,7 @@ function startCLI(client, helpers) {
             console.log(`${tag("ERR", RED)} Usage: isblacklisted <guildId> <userId>`);
             break;
           }
-          const bl = isBlacklisted(guildId, userId);
+          const bl = await isBlacklisted(guildId, userId);
           console.log(bl
             ? `${tag("BL", YELLOW)} ${userId} IS blacklisted in guild ${guildId}.`
             : `${tag("OK", GREEN)} ${userId} is NOT blacklisted in guild ${guildId}.`

@@ -13,7 +13,7 @@ module.exports = {
   async execute(interaction) {
     const { guild } = interaction;
     const role = interaction.options.getRole("role");
-    setGuildConfig(guild.id, { hrRole: role.id });
+    await setGuildConfig(guild.id, { hrRole: role.id });
     return interaction.reply({ content: `✅ HR role set to ${role}.`, ephemeral: true });
   },
 };

@@ -12,7 +12,7 @@ module.exports = {
 
   async execute(interaction) {
     const channel = interaction.options.getChannel("channel");
-    setConfig({ inviteChannelId: channel.id });
+    await setConfig({ inviteChannelId: channel.id });
     return interaction.reply({
       content: `✅ Staff invites will now be created for ${channel}. Each accepted applicant gets a unique 1-use link valid for 24 hours.`,
       ephemeral: true,

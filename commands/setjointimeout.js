@@ -24,7 +24,7 @@ module.exports = {
         ephemeral: true,
       });
     }
-    setConfig({ joinTimeoutMs: ms });
+    await setConfig({ joinTimeoutMs: ms });
     const friendly = durationStr.endsWith("m")
       ? `${parseInt(durationStr)} minute${parseInt(durationStr) === 1 ? "" : "s"}`
       : durationStr.endsWith("h")

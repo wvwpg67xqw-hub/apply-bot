@@ -64,13 +64,13 @@ client.once("ready", async () => {
   }
 
   // Link any unlinked guilds if a staff server is already configured
-  const cfg = getConfig();
+  const cfg = await getConfig();
   if (cfg.staffGuildId) {
     const staffGuild = client.guilds.cache.get(cfg.staffGuildId);
     if (staffGuild) {
       for (const guild of client.guilds.cache.values()) {
         if (guild.id === staffGuild.id) continue;
-        const guildCfg = getGuild(guild.id);
+        const guildCfg = await getGuild(guild.id);
         if (guildCfg?.routeChannelId) continue;
         const entry = getServerConfig(guild.name, guild.id);
         if (!entry) continue;
@@ -78,7 +78,7 @@ client.once("ready", async () => {
           (c) => entry.channelNames.includes(c.name) && c.isTextBased()
         );
         if (ch) {
-          setGuildConfig(guild.id, { routeChannelId: ch.id });
+          await setGuildConfig(guild.id, { routeChannelId: ch.id });
           log.info("LINK", `Linked [${guild.name}] → #${ch.name}`);
         }
       }
@@ -100,12 +100,13 @@ client.on("guildCreate", async (guild) => {
   await autoLinkNewGuild(client, guild);
 });
 
-client.on("guildMemberAdd", (member) => {
-  const cfg = getConfig();
+client.on("guildMemberAdd", async (member) => {
+  const cfg = await getConfig();
   if (member.guild.id !== cfg.staffGuildId) return;
-  const pending = getPendingJoins().find((e) => e.userId === member.id);
+  const pendingList = await getPendingJoins();
+  const pending = pendingList.find((e) => e.userId === member.id);
   if (!pending) return;
-  removePendingJoin(member.id);
+  await removePendingJoin(member.id);
   log.info("JOIN_WATCH", `${member.user.tag} joined staff server — removed from pending list`);
 });
 
@@ -114,7 +115,7 @@ client.on("guildMemberUpdate", async (oldMember, newMember) => {
                   newMember.roles.cache.has(AUTO_UNBLACKLIST_ROLE);
   if (!gained) return;
 
-  const removed = removeFromBlacklist(newMember.guild.id, newMember.id);
+  const removed = await removeFromBlacklist(newMember.guild.id, newMember.id);
   if (removed) {
     log.info("UNBLACKLIST", `Auto-unblacklisted ${newMember.user.tag} (${newMember.id}) in [${newMember.guild.name}] — gained role ${AUTO_UNBLACKLIST_ROLE}`);
     try {

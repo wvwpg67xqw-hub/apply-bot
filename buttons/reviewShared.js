@@ -73,7 +73,7 @@ async function buildReviewContext(interaction) {
   let applicantUser  = null;
   try { applicantUser = await client.users.fetch(applicantId); } catch {}
 
-  const applicantBlacklisted = sourceGuild ? isBlacklisted(sourceGuild.id, applicantId) : false;
+  const applicantBlacklisted = sourceGuild ? await isBlacklisted(sourceGuild.id, applicantId) : false;
 
   // Posts a result card to the parent channel (visible outside the thread)
   const postResult = async (resultEmbed) => {

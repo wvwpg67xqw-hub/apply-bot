@@ -9,7 +9,7 @@ module.exports = {
 
   async execute(interaction) {
     const { guild, client } = interaction;
-    const guildConfig = getGuild(guild.id);
+    const guildConfig = await getGuild(guild.id);
     const resolved    = await resolveAppChannel(client, guild, guildConfig);
     const hrRole      = resolved
       ? resolveHRRole(guild.name, resolved.guild, guildConfig?.hrRole, guild.id)

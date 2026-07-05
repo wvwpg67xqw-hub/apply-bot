@@ -39,7 +39,7 @@ module.exports = {
 
     // Grant team + normal roles in the source server
     const sourceGuild    = client.guilds.cache.find((g) => g.name === sourceGuildName);
-    const sourceGuildCfg = sourceGuild ? getGuild(sourceGuild.id) : null;
+    const sourceGuildCfg = sourceGuild ? await getGuild(sourceGuild.id) : null;
     const rolesGranted   = [];
     const roleErrors     = [];
 
@@ -128,7 +128,7 @@ module.exports = {
 
         // Track this user — if they don't join the staff server within the timeout, alert the role
         if (applicantUser) {
-          addPendingJoin({
+          await addPendingJoin({
             userId:          applicantUser.id,
             applicantTag:    applicantUser.tag,
             sourceGuildName,

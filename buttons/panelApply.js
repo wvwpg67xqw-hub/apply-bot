@@ -38,11 +38,11 @@ module.exports = {
       return interaction.editReply({ content: "❌ The Growth Manager application is not available in this server." });
     }
 
-    if (isBlacklisted(guild.id, user.id)) {
+    if (await isBlacklisted(guild.id, user.id)) {
       return interaction.editReply({ content: "🚫 You are blacklisted from submitting applications." });
     }
 
-    const resolved = await resolveAppChannel(client, guild, getGuild(guild.id));
+    const resolved = await resolveAppChannel(client, guild, await getGuild(guild.id));
     if (!resolved) {
       return interaction.editReply({
         content: "❌ No application channel configured. Ask an admin to run `/setstaffserver` in the staff server.",

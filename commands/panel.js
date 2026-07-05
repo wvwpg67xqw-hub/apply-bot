@@ -36,7 +36,7 @@ module.exports = {
   async execute(interaction) {
     const { guild } = interaction;
     const target   = interaction.options.getChannel("channel") ?? interaction.channel;
-    const guildCfg = getGuild(guild.id);
+    const guildCfg = await getGuild(guild.id);
 
     // Build disabled list from options; if an option wasn't provided, fall
     // back to whatever was already saved so re-running /panel doesn't reset choices.
@@ -56,7 +56,7 @@ module.exports = {
     }
 
     const sent = await target.send({ embeds: [panelEmbed], components: [row] });
-    setGuildConfig(guild.id, { panelChannelId: target.id, panelMessageId: sent.id, disabledRoles: disabled });
+    await setGuildConfig(guild.id, { panelChannelId: target.id, panelMessageId: sent.id, disabledRoles: disabled });
 
     const included = roleKeys.filter(k => !disabled.includes(k)).join(", ") || "none";
     return interaction.reply({ content: `✅ Panel sent to ${target}.\n**Roles included:** ${included}`, ephemeral: true });

@@ -750,7 +750,7 @@ async function handleDevCommand(interaction, client, helpers) {
       return true;
     }
 
-    const guildCfg      = getGuild(targetGuildId) || {};
+    const guildCfg      = (await getGuild(targetGuildId)) || {};
     const disabledRoles = Array.isArray(guildCfg.disabledRoles) ? [...guildCfg.disabledRoles] : [];
 
     if (closing && !disabledRoles.includes(roleType)) {
@@ -760,7 +760,7 @@ async function handleDevCommand(interaction, client, helpers) {
       if (idx !== -1) disabledRoles.splice(idx, 1);
     }
 
-    setGuildConfig(targetGuildId, { disabledRoles });
+    await setGuildConfig(targetGuildId, { disabledRoles });
 
     // Try to edit the existing panel message
     let panelEdited = false;
@@ -822,7 +822,7 @@ async function handleDevCommand(interaction, client, helpers) {
 
     const lines = [];
     for (const g of guildsToCheck) {
-      const cfg      = getGuild(g.id) || {};
+      const cfg      = (await getGuild(g.id)) || {};
       const disabled = Array.isArray(cfg.disabledRoles) ? cfg.disabledRoles : [];
       const hasPanelMsg = !!(cfg.panelChannelId && cfg.panelMessageId);
 

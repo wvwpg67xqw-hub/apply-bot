@@ -12,7 +12,7 @@ module.exports = {
 
   async execute(interaction) {
     const target  = interaction.options.getUser("user");
-    const count   = removeFromBlacklistAllGuilds(target.id);
+    const count   = await removeFromBlacklistAllGuilds(target.id);
     return interaction.reply({
       content: count > 0
         ? `✅ ${target} has been removed from the blacklist${count > 1 ? ` across ${count} server(s)` : ""}.`

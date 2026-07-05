@@ -19,7 +19,7 @@ module.exports = {
     const role    = interaction.options.getRole("role");
     const update  = { applicationChannel: channel.id };
     if (role) update.hrRole = role.id;
-    setGuildConfig(guild.id, update);
+    await setGuildConfig(guild.id, update);
     return interaction.reply({
       content: `✅ Fallback channel set to ${channel}.${role ? ` HR role set to ${role}.` : ""}`,
       ephemeral: true,

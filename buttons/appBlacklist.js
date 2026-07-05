@@ -27,7 +27,7 @@ module.exports = {
 
     if (sourceGuild) {
       try {
-        addToBlacklist(sourceGuild.id, applicantId);
+        await addToBlacklist(sourceGuild.id, applicantId);
         await applyStaffBlacklistRole(sourceGuild, applicantId);
       } catch (err) {
         log.error("BLACKLIST", "Failed to blacklist applicant", err.message);

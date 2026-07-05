@@ -30,7 +30,7 @@ module.exports = {
       });
     }
 
-    addToBlacklist(guild.id, target.id, expiresAt);
+    await addToBlacklist(guild.id, target.id, expiresAt);
     await applyStaffBlacklistRole(guild, target.id);
     await sendBlacklistLog(client, {
       applicantId:     target.id,
