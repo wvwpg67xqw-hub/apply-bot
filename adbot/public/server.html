@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Configure Server — Staff Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #0d0f1a; }
+    .topbar { background: #111326; border-bottom: 1px solid #1e2442; }
+    .card { background: #161b2e; border: 1px solid #1e2442; }
+    .tab-bar { background: #111326; border-bottom: 1px solid #1e2442; }
+    .tab-btn.active { color: white; border-bottom: 2px solid #5865F2; }
+    .tab-btn { color: #6b7280; border-bottom: 2px solid transparent; padding-bottom: 12px; font-size: 14px; font-weight: 500; white-space: nowrap; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    select { background: #0d0f1a; border: 1px solid #2d3561; color: white; border-radius: 8px; padding: 8px 12px; width: 100%; font-size: 14px; }
+    select:focus { outline: none; border-color: #5865F2; }
+    select option { background: #161b2e; }
+    .btn-primary { background: #5865F2; color: white; border-radius: 10px; padding: 10px 24px; font-weight: 600; font-size: 14px; transition: background 0.15s; }
+    .btn-primary:hover { background: #4752c4; }
+    .btn-primary:disabled { background: #374151; cursor: not-allowed; }
+    .badge-staff   { background: #4a1942; color: #e879f9; }
+    .badge-main    { background: #14372a; color: #4ade80; }
+    .badge-network { background: #1e2c4a; color: #60a5fa; }
+    .type-radio:checked + label { border-color: #5865F2; background: #1a2040; }
+    .role-pill { background: #2d3561; color: #a5b4fc; border-radius: 20px; padding: 2px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+    .role-pill button { color: #6b7280; font-size: 16px; line-height: 1; }
+    .role-pill button:hover { color: white; }
+    .section-label { color: #9ca3af; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+    .divider { border-top: 1px solid #1e2442; }
+    .save-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #111326; border-top: 1px solid #1e2442; padding: 12px 16px; z-index: 50; }
+    .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); padding: 10px 20px; border-radius: 10px; font-size: 14px; font-weight: 500; z-index: 100; animation: fadeInOut 3s forwards; }
+    .toast.success { background: #14532d; color: #4ade80; }
+    .toast.error   { background: #450a0a; color: #f87171; }
+    @keyframes fadeInOut { 0%{opacity:0;transform:translateX(-50%) translateY(-8px)} 10%{opacity:1;transform:translateX(-50%) translateY(0)} 80%{opacity:1} 100%{opacity:0} }
+    ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #2d3561; border-radius: 2px; }
+  </style>
+</head>
+<body class="min-h-screen text-white pb-24">
+
+  <!-- Top Bar -->
+  <header class="topbar px-4 py-3 flex items-center gap-3">
+    <a href="/dashboard.html" class="text-gray-400 hover:text-white transition-colors text-lg">←</a>
+    <div id="guild-header" class="flex items-center gap-3 flex-1 min-w-0">
+      <div id="guild-icon" class="w-9 h-9 rounded-full bg-indigo-600 flex-shrink-0"></div>
+      <div class="min-w-0">
+        <div id="guild-name" class="font-semibold text-white text-sm truncate">Loading…</div>
+        <span id="guild-badge" class="text-xs px-2 py-0.5 rounded-full badge-network">Network</span>
+      </div>
+    </div>
+    <a href="/auth/logout" class="text-xs text-gray-600 hover:text-gray-400 flex-shrink-0">Logout</a>
+  </header>
+
+  <!-- Tab Bar -->
+  <div class="tab-bar px-4 flex gap-6 overflow-x-auto">
+    <button class="tab-btn active" data-tab="channels">Channels</button>
+    <button class="tab-btn" data-tab="permissions">Permissions</button>
+    <button class="tab-btn" data-tab="type">Server Type</button>
+  </div>
+
+  <main class="max-w-2xl mx-auto px-4 py-6">
+
+    <!-- CHANNELS TAB -->
+    <div id="tab-channels" class="tab-panel active">
+      <div id="channels-form" class="flex flex-col gap-5">
+        <p class="text-gray-500 text-sm text-center">Loading channels…</p>
+      </div>
+    </div>
+
+    <!-- PERMISSIONS TAB -->
+    <div id="tab-permissions" class="tab-panel">
+      <div class="card rounded-2xl p-4 mb-4">
+        <p class="text-gray-400 text-sm">Set which roles can use each command. Leave empty to allow everyone (or rely on Discord permissions).</p>
+      </div>
+      <div id="permissions-form" class="flex flex-col gap-4">
+        <p class="text-gray-500 text-sm text-center">Loading…</p>
+      </div>
+    </div>
+
+    <!-- SERVER TYPE TAB -->
+    <div id="tab-type" class="tab-panel">
+      <div class="card rounded-2xl p-5">
+        <h2 class="font-semibold text-white mb-1">Server Role</h2>
+        <p class="text-gray-400 text-sm mb-6">Determines how this server is treated by the bot. Only one server can be the Staff server at a time — setting it here will automatically unset any previous one.</p>
+
+        <div id="type-options" class="flex flex-col gap-3">
+          <label class="flex items-start gap-3 p-4 rounded-xl border border-gray-700 cursor-pointer hover:border-indigo-500 transition-colors">
+            <input type="radio" name="guild-type" value="staff" class="mt-1 type-radio">
+            <div>
+              <div class="font-medium text-purple-300">Staff Server</div>
+              <div class="text-gray-400 text-sm">Your designated staff server. Staff-only commands (/fire, /promote, /demote-user, etc.) are registered here. Only one server can be set to this type.</div>
+            </div>
+          </label>
+          <label class="flex items-start gap-3 p-4 rounded-xl border border-gray-700 cursor-pointer hover:border-indigo-500 transition-colors">
+            <input type="radio" name="guild-type" value="main" class="mt-1 type-radio">
+            <div>
+              <div class="font-medium text-white">Main Server</div>
+              <div class="text-gray-400 text-sm">Staff members on break get their break role added here. The /fire command removes roles from this server.</div>
+            </div>
+          </label>
+          <label class="flex items-start gap-3 p-4 rounded-xl border border-gray-700 cursor-pointer hover:border-indigo-500 transition-colors">
+            <input type="radio" name="guild-type" value="network" class="mt-1 type-radio">
+            <div>
+              <div class="font-medium text-white">Network Server</div>
+              <div class="text-gray-400 text-sm">A regular server in your network. All standard commands are available.</div>
+            </div>
+          </label>
+        </div>
+
+        <div id="type-warning" class="hidden mt-4 p-3 rounded-lg bg-yellow-900/30 border border-yellow-600/40 text-yellow-300 text-sm"></div>
+
+        <button id="save-type-btn" class="btn-primary mt-6 w-full">Save Server Type</button>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Save Bar (channels + permissions) -->
+  <div class="save-bar flex items-center justify-between gap-4">
+    <span id="save-status" class="text-gray-500 text-sm">Unsaved changes</span>
+    <div class="flex gap-2">
+      <button id="save-btn" class="btn-primary">Save Changes</button>
+    </div>
+  </div>
+
+  <script>
+    const guildId = new URLSearchParams(window.location.search).get('id');
+    if (!guildId) window.location = '/dashboard.html';
+
+    let guildData = null;
+    let pendingPermissions = {};
+
+    // ── Load guild data ───────────────────────────────────────
+    async function init() {
+      try {
+        const data = await fetch(`/api/guild/${guildId}`).then(r => r.json());
+        if (data.error) { window.location = '/dashboard.html'; return; }
+        guildData = data;
+        renderHeader();
+        renderChannels();
+        renderPermissions();
+        renderType();
+      } catch (err) {
+        showToast('Failed to load server data', 'error');
+      }
+    }
+
+    function renderHeader() {
+      const { id, name, icon, type } = guildData;
+      document.title = `${name} — Staff Dashboard`;
+      document.getElementById('guild-name').textContent = name;
+
+      const iconEl = document.getElementById('guild-icon');
+      if (icon) {
+        iconEl.outerHTML = `<img src="${icon}" class="w-9 h-9 rounded-full flex-shrink-0" id="guild-icon">`;
+      } else {
+        iconEl.textContent = name.charAt(0).toUpperCase();
+      }
+
+      const badge = document.getElementById('guild-badge');
+      badge.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+      badge.className = `text-xs px-2 py-0.5 rounded-full badge-${type}`;
+    }
+
+    // ── Channels Tab ─────────────────────────────────────────
+    function renderChannels() {
+      const { config, channels, channelFields, roles, roleFields } = guildData;
+      const form = document.getElementById('channels-form');
+
+      const channelOptions = `<option value="">— Not set —</option>` +
+        channels.map(c => `<option value="${c.id}">#${escHtml(c.name)}</option>`).join('');
+      const roleOptions = `<option value="">— Not set —</option>` +
+        roles.map(r => `<option value="${r.id}" style="color:${r.color || '#fff'}">${escHtml(r.name)}</option>`).join('');
+
+      form.innerHTML = `
+        <div class="card rounded-2xl p-5">
+          <p class="section-label">Log Channels</p>
+          <div class="flex flex-col gap-4">
+            ${channelFields.map(f => `
+              <div>
+                <label class="block text-gray-300 text-sm font-medium mb-1">${f.label}</label>
+                <select id="cfg-${f.key}" data-key="${f.key}">
+                  ${channelOptions}
+                </select>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="card rounded-2xl p-5">
+          <p class="section-label">Roles</p>
+          <div class="flex flex-col gap-4">
+            ${roleFields.map(f => `
+              <div>
+                <label class="block text-gray-300 text-sm font-medium mb-1">${f.label}</label>
+                <select id="cfg-${f.key}" data-key="${f.key}">
+                  ${roleOptions}
+                </select>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+
+      // Set saved values
+      [...channelFields, ...roleFields].forEach(f => {
+        const el = document.getElementById(`cfg-${f.key}`);
+        if (el && config[f.key]) el.value = config[f.key];
+      });
+    }
+
+    // ── Permissions Tab ───────────────────────────────────────
+    function renderPermissions() {
+      const { commandGroups, roles, permissions } = guildData;
+      const form = document.getElementById('permissions-form');
+
+      pendingPermissions = {};
+      for (const [field, roleIds] of Object.entries(permissions)) {
+        const cmd = field.replace(/_roles$/, '').replace(/_/g, '-');
+        pendingPermissions[cmd] = [...roleIds];
+      }
+
+      form.innerHTML = commandGroups.map(group => `
+        <div class="card rounded-2xl overflow-hidden">
+          <div class="px-5 py-3 border-b border-gray-800">
+            <span class="font-semibold text-white text-sm">${group.name}</span>
+          </div>
+          <div class="divide-y divide-gray-800">
+            ${group.commands.map(cmd => `
+              <div class="px-5 py-3">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-gray-200 text-sm font-mono">/${cmd}</span>
+                </div>
+                <div class="flex flex-wrap gap-1 mb-2" id="pills-${cmd}">
+                  ${renderPills(cmd, roles)}
+                </div>
+                <select class="mt-1" id="add-role-${cmd}" onchange="addRoleToCmd('${cmd}', this)">
+                  <option value="">+ Add role…</option>
+                  ${roles.map(r => `<option value="${r.id}">${escHtml(r.name)}</option>`).join('')}
+                </select>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderPills(cmd, roles) {
+      const roleIds = pendingPermissions[cmd] || [];
+      if (roleIds.length === 0) return `<span class="text-gray-600 text-xs italic">Any role (unrestricted)</span>`;
+      return roleIds.map(id => {
+        const role = roles.find(r => r.id === id);
+        const name = role ? role.name : id;
+        return `<span class="role-pill">${escHtml(name)}<button onclick="removeRoleFromCmd('${cmd}','${id}')" title="Remove">×</button></span>`;
+      }).join('');
+    }
+
+    function addRoleToCmd(cmd, select) {
+      const roleId = select.value;
+      if (!roleId) return;
+      select.value = '';
+      if (!pendingPermissions[cmd]) pendingPermissions[cmd] = [];
+      if (pendingPermissions[cmd].includes(roleId)) return;
+      pendingPermissions[cmd].push(roleId);
+      document.getElementById(`pills-${cmd}`).innerHTML = renderPills(cmd, guildData.roles);
+    }
+
+    function removeRoleFromCmd(cmd, roleId) {
+      if (!pendingPermissions[cmd]) return;
+      pendingPermissions[cmd] = pendingPermissions[cmd].filter(id => id !== roleId);
+      document.getElementById(`pills-${cmd}`).innerHTML = renderPills(cmd, guildData.roles);
+    }
+
+    // ── Type Tab ─────────────────────────────────────────────
+    function renderType() {
+      const { type } = guildData;
+      const radio = document.querySelector(`input[name="guild-type"][value="${type}"]`);
+      if (radio) radio.checked = true;
+      updateTypeLabels();
+
+      document.querySelectorAll('input[name="guild-type"]').forEach(r => {
+        r.addEventListener('change', () => {
+          updateTypeLabels();
+          const warn = document.getElementById('type-warning');
+          if (r.value === 'staff' && type !== 'staff') {
+            warn.textContent = '⚠️ Setting this as the Staff Server will remove that designation from any other server. Staff-only commands will re-register here on next bot restart.';
+            warn.classList.remove('hidden');
+          } else {
+            warn.classList.add('hidden');
+          }
+        });
+      });
+    }
+
+    function updateTypeLabels() {
+      document.querySelectorAll('input[name="guild-type"]').forEach(r => {
+        const label = r.closest('label');
+        if (r.checked) {
+          label.classList.add('border-indigo-500', 'bg-indigo-900/10');
+          label.classList.remove('border-gray-700');
+        } else {
+          label.classList.remove('border-indigo-500', 'bg-indigo-900/10');
+          label.classList.add('border-gray-700');
+        }
+      });
+    }
+
+    // ── Save ─────────────────────────────────────────────────
+    async function saveAll() {
+      const btn = document.getElementById('save-btn');
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+
+      try {
+        const activeTab = document.querySelector('.tab-panel.active').id.replace('tab-', '');
+
+        if (activeTab === 'channels') {
+          const data = {};
+          document.querySelectorAll('#channels-form select[data-key]').forEach(el => {
+            data[el.dataset.key] = el.value || null;
+          });
+          const res = await fetch(`/api/guild/${guildId}/config`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+          });
+          if (!res.ok) throw new Error('Save failed');
+        }
+
+        if (activeTab === 'permissions') {
+          const res = await fetch(`/api/guild/${guildId}/permissions/batch`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ permissions: pendingPermissions }),
+          });
+          if (!res.ok) throw new Error('Save failed');
+        }
+
+        showToast('Changes saved!', 'success');
+        document.getElementById('save-status').textContent = 'All changes saved';
+      } catch (err) {
+        showToast('Failed to save changes', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Changes';
+      }
+    }
+
+    document.getElementById('save-btn').addEventListener('click', saveAll);
+
+    document.getElementById('save-type-btn').addEventListener('click', async () => {
+      const val = document.querySelector('input[name="guild-type"]:checked')?.value;
+      if (!val) return;
+      const btn = document.getElementById('save-type-btn');
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        const res = await fetch(`/api/guild/${guildId}/config`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: val }),
+        });
+        if (!res.ok) throw new Error();
+        guildData.type = val;
+        renderHeader();
+        document.getElementById('type-warning').classList.add('hidden');
+        showToast(
+          val === 'staff'
+            ? 'Staff server set! Restart the bot to re-register staff commands here.'
+            : 'Server type saved!',
+          'success'
+        );
+      } catch {
+        showToast('Failed to save type', 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Save Server Type';
+      }
+    });
+
+    // ── Tabs ─────────────────────────────────────────────────
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+
+        const saveBar = document.querySelector('.save-bar');
+        saveBar.style.display = btn.dataset.tab === 'type' ? 'none' : '';
+      });
+    });
+
+    // ── Utils ────────────────────────────────────────────────
+    function escHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function showToast(msg, type = 'success') {
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 3100);
+    }
+
+    init();
+  </script>
+</body>
+</html>
