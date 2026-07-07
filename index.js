@@ -16,12 +16,25 @@ const { commands: commandModules, commandsJson } = require("./commands");
 const { dispatchButton } = require("./buttons");
 
 const {
-  getConfig, getGuild, setGuildConfig,
-  addToBlacklist, removeFromBlacklist, isBlacklisted,
-  getPendingJoins, removePendingJoin,
+  getConfig,
+  getGuild,
+  setGuildConfig,
+  addToBlacklist,
+  removeFromBlacklist,
+  isBlacklisted,
+  getPendingJoins,
+  removePendingJoin,
+  restoreBlacklistRole,
+  startBlacklistExpiration,
 } = require("./lib/db");
+
 const { parseDuration } = require("./lib/duration");
-const { AUTO_UNBLACKLIST_ROLE, getServerConfig, GROWTH_GUILD_IDS } = require("./lib/serverConfig");
+const { 
+  AUTO_UNBLACKLIST_ROLE, 
+  getServerConfig, 
+  GROWTH_GUILD_IDS 
+} = require("./lib/serverConfig");
+
 const { autoLinkNewGuild } = require("./lib/staffSetup");
 const { buildPanelEmbed, buildPanelRow, PANEL_ROLE_DEFS } = require("./lib/panel");
 const { startInviteRotation } = require("./lib/invite");
