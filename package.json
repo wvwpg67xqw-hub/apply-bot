@@ -1,14 +1,16 @@
 {
-  "name": "apply-bot",
+  "name": "@workspace/apply-bot",
   "version": "1.0.0",
+  "private": true,
   "main": "index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "node index.js"
   },
   "dependencies": {
     "discord.js": "^14.16.3",
     "express": "^5.2.1",
-    "mysql2": "^3.22.5"
+    "pg": "^8.13.1"
   }
 }
