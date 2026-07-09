@@ -2,19 +2,10 @@ const log = require("../utils/logger");
 const { ROLE_TYPES, getServerConfig } = require("../lib/serverConfig");
 const { isBlacklisted } = require("../lib/db");
 
-// Shared preamble for the accept / deny / blacklist review buttons: acks the
-// interaction immediately (so Discord never shows "This interaction failed"
-// no matter how long the rest of the work takes), then parses the
-// application embed footer, checks reviewer permissions, and resolves the
-// applicant. Each button file only needs to implement its own specific action.
-
 async function buildReviewContext(interaction) {
   const client     = interaction.client;
   const destGuild  = interaction.guild;
 
-  // Ack right away — everything below this point can be slow (member
-  // fetches, guild lookups) and must never block Discord's 3-second
-  // acknowledgement window.
   try {
     await interaction.deferReply();
   } catch (err) {
@@ -33,7 +24,6 @@ async function buildReviewContext(interaction) {
 
   log.info("REVIEW", `Button: ${interaction.customId} — ${interaction.user.tag} (${interaction.user.id}) in [${destGuild.name}] | source: ${sourceGuildName} | type: ${roleType}`);
 
-  // Fetch the member fresh so we always have their real current roles
   let reviewer_member;
   try {
     reviewer_member = await destGuild.members.fetch(interaction.user.id);
@@ -45,9 +35,10 @@ async function buildReviewContext(interaction) {
   const sourceGuild     = client.guilds.cache.find((g) => g.name === sourceGuildName);
   const serverEntry     = getServerConfig(sourceGuildName, sourceGuild?.id);
   const reviewerRoleId  = serverEntry?.reviewerRoleId;
+  const isAdmin         = reviewer_member.permissions.has("Administrator");
   const hasAccess       = reviewerRoleId
-    ? reviewer_member.roles.cache.has(reviewerRoleId)
-    : false;
+    ? reviewer_member.roles.cache.has(reviewerRoleId) || isAdmin
+    : isAdmin;
 
   log.debug("REVIEW", "Permission check", {
     reviewer:       interaction.user.tag,
@@ -75,7 +66,6 @@ async function buildReviewContext(interaction) {
 
   const applicantBlacklisted = sourceGuild ? await isBlacklisted(sourceGuild.id, applicantId) : false;
 
-  // Posts a result card to the parent channel (visible outside the thread)
   const postResult = async (resultEmbed) => {
     const parentChannel = interaction.channel?.parent;
     if (parentChannel?.isTextBased()) {
